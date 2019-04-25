@@ -4,4 +4,15 @@
 
 <web-app>
   <display-name>Archetype Created Web Application</display-name>
+
+  <servlet>
+    <servlet-name>Groovy</servlet-name>
+    <servlet-class>groovy.servlet.GroovyServlet</servlet-class>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>Groovy</servlet-name>
+    <url-pattern>/fproxy</url-pattern>
+  </servlet-mapping>
+
 </web-app>
