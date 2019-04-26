@@ -3,16 +3,16 @@
  "http://java.sun.com/dtd/web-app_2_3.dtd" >
 
 <web-app>
-  <display-name>Archetype Created Web Application</display-name>
+  <display-name>Asbestos Proxy</display-name>
 
   <servlet>
-    <servlet-name>Groovy</servlet-name>
-    <servlet-class>groovy.servlet.GroovyServlet</servlet-class>
+    <servlet-name>Proxy</servlet-name>
+    <servlet-class>gov.nist.asbestos.fproxy.ProxyServlet</servlet-class>
   </servlet>
 
   <servlet-mapping>
-    <servlet-name>Groovy</servlet-name>
-    <url-pattern>/fproxy</url-pattern>
+    <servlet-name>Proxy</servlet-name>
+    <url-pattern>/fproxy_war/*</url-pattern>
   </servlet-mapping>
 
 </web-app>
