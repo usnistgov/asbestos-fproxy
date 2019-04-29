@@ -1,74 +1,180 @@
 package gov.nist.asbestos.fproxy
 
+import com.google.gwt.user.client.rpc.StackTrace
+import gov.nist.asbestos.simapi.sim.Event
+import gov.nist.asbestos.simapi.sim.SimConfig
 import gov.nist.asbestos.simapi.sim.SimStore
+import gov.nist.asbestos.simapi.sim.SimStoreBuilder
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
-import groovy.servlet.GroovyServlet
+import gov.nist.asbestos.simapi.tk.simCommon.TestSession
+import groovy.json.JsonSlurper
 import groovy.transform.TypeChecked
+import org.apache.log4j.Logger
 
 import javax.servlet.ServletConfig
+import javax.servlet.http.HttpServlet
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 
 @TypeChecked
-class ProxyServlet extends GroovyServlet {
+class ProxyServlet extends HttpServlet {
+    static Logger log = Logger.getLogger(ProxyServlet);
     File externalCache = null
-    SimId simId = null
-    String transaction = null
-    String actor = null
-    SimStore simStore
 
     void init(ServletConfig config) {
-        println 'init done'
         super.init(config)
+        log.debug 'init done'
         externalCache = new File('/home/bill/ec')
         Installation.instance().externalCache = externalCache
     }
 
     void doPost(HttpServletRequest req, HttpServletResponse resp) {
+
         // typical URI is
         // for FHIR transactions
         // http://host:port/appContext/prox/simId/actor/transaction
         // for general stuff
         // http://host:port/appContext/prox/simId
+//        resp.sendError(resp.SC_BAD_GATEWAY,'done')
         try {
             String uri = req.requestURI.toLowerCase()
-            println "uri is ${uri}"
-            parseUri(uri)
+            log.debug "doPost ${uri}"
+            SimStore simStore = parseUri(uri, req, resp, false)
+
+            if (!simStore)
+                return
+            Event event = simStore.newEvent()
+            event.selectRequest()
+            event.putRequestBody(req.inputStream.bytes)
+            Headers headers = new Headers()
+            headers.names = req.headerNames
+            req.headerNames.each { String name ->
+                Enumeration hdrs = req.getHeaders(name)
+                headers.headers.put(name, hdrs)
+            }
+            event.putRequestHeader(HeadersUtil.headersAsString(headers))
+
         } catch (AssertionError e) {
-            resp.sendError(resp.SC_NOT_FOUND, e.message)
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
+            return
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
         }
     }
 
-    void parseUri(String uri) {
-        List<String> uriParts = uri.split('/') as List<String>
+    void doDelete(HttpServletRequest req, HttpServletResponse resp) {
+        SimStore simStore
+        try {
+            simStore = new SimStore(externalCache)
+            String uri = req.requestURI.toLowerCase()
+            log.info "doDelete  ${uri}"
+            parseUri(uri, req, resp, true)
+            resp.setStatus(resp.SC_OK)
+        } catch (AssertionError e) {
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
+            return
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
+        }
+    }
 
-        if (uriParts.size() >= 2) {
-            // /prox/simId
-            if (uriParts[0] == 'prox') { // no appContext
-                simId = SimId.buildFromRawId(uriParts[1])
-                uriParts.remove(0)  // prox
-                uriParts.remove(0)  // simId
-            } else if (uriParts[1] == 'prox') { // has appContext
-                simId = SimId.buildFromRawId(uriParts[2])
+    /**
+     *
+     * @param uri
+     * @param req
+     * @param resp
+     * @param isDelete
+     * @return SimStore
+     */
+    SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, boolean isDelete) {
+        List<String> uriParts = uri.split('/') as List<String>
+        SimStore simStore = new SimStore(externalCache)
+
+        if (uriParts.size() == 3 && uriParts[2] == 'prox' && !isDelete) {
+            // CREATE
+            // /appContext/prox
+            // control channel - request to create proxy channel
+
+            String rawRequest = req.inputStream.text
+            log.debug rawRequest
+            simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
+            resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
+            return null
+        }
+
+        if (uriParts.size() >= 4) {
+            // /appContext/prox/simId
+            if (uriParts[0] == '' && uriParts[2] == 'prox') { // no appContext
+                SimId simId = SimId.buildFromRawId(uriParts[3])
+                simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+                uriParts.remove(0)  // leasing empty string
                 uriParts.remove(0)  // appContext
                 uriParts.remove(0)  // prox
                 uriParts.remove(0)  // simId
             }
         }
-        assert simId : "ProxyServlet: request to ${uri} - cannot find SimId\n"
+
+        assert simStore.simId : "ProxyServlet: request to ${uri} - SimId must be present in URI\n"
+
+        if (isDelete) {
+            simStore.deleteSim()
+            return null
+        }
 
         if (!uriParts.empty) {
-            actor = uriParts[0]
+            simStore.actor = uriParts[0]
             uriParts.remove(0)
         }
         if (!uriParts.empty) {
-            transaction = uriParts[0]
+            simStore.transaction = uriParts[0]
             uriParts.remove(0)
         }
+
+        assert simStore.actor : "ProxyServlet: POST to ${simStore.simId} with no actor specified\n"
+        assert simStore.transaction : "ProxyServlet: POST to ${simStore.simId} actor ${simStore.actor} with no transaction specified\n"
 
         // verify that sim exists
-        simStore = new SimStore(externalCache, simId)
         simStore.getStore()  // exception if sim does not exist
+
+        return simStore // expect content
+
+    }
+
+    /**
+     *
+     * @param rawRequest
+     * @param newChannelRequest
+     * @param req
+     * @return newlyCreated?
+     */
+    boolean newChannel(String rawRequest, NewChannelRequest newChannelRequest, HttpServletRequest req, SimStore simStore) {
+        assert Installation.instance().environmentExists(newChannelRequest.environment) : "Environment ${newChannelRequest.environment} does not exixt"
+        assert Installation.instance().fhirSimDbFile(new TestSession(newChannelRequest.testSession)) : "TestSession ${newChannelRequest.testSession} does not exist"
+        // TODO validate actortype
+        simStore.simId = new SimId(new TestSession(newChannelRequest.testSession), newChannelRequest.simId, newChannelRequest.actorType, newChannelRequest.environment)
+        simStore.withTransaction('create')
+        simStore.getStore(true)
+        Event event = simStore.newEvent()
+        event.selectRequest()
+        event.putRequestBody(rawRequest.bytes)
+        Headers headers = new Headers()
+        headers.names = req.headerNames
+        req.headerNames.each { String name ->
+            Enumeration hdrs = req.getHeaders(name)
+            headers.headers.put(name, hdrs)
+        }
+        event.putRequestHeader(HeadersUtil.headersAsString(headers))
+        simStore.newlyCreated
     }
 }
