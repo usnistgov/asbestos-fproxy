@@ -7,12 +7,12 @@
 
   <servlet>
     <servlet-name>Proxy</servlet-name>
-    <servlet-class>gov.nist.asbestos.fproxy.ProxyServlet</servlet-class>
+    <servlet-class>gov.nist.asbestos.fproxy.wrapper.ProxyServlet</servlet-class>
   </servlet>
 
   <servlet-mapping>
     <servlet-name>Proxy</servlet-name>
-    <url-pattern>/fproxy_war/*</url-pattern>
+    <url-pattern>/prox/*</url-pattern>
   </servlet-mapping>
 
 </web-app>
