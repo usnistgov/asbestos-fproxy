@@ -1,6 +1,6 @@
 package gov.nist.asbestos.fproxy
 
-import gov.nist.asbestos.simapi.sim.SimStore
+import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
 import groovy.servlet.GroovyServlet
