@@ -1,14 +1,15 @@
-package gov.nist.asbestos.fproxy
+package gov.nist.asbestos.fproxy.wrapper
 
 import com.google.gwt.user.client.rpc.StackTrace
-import gov.nist.asbestos.simapi.sim.Event
-import gov.nist.asbestos.simapi.sim.SimConfig
-import gov.nist.asbestos.simapi.sim.SimStore
 import gov.nist.asbestos.simapi.sim.SimStoreBuilder
+import gov.nist.asbestos.simapi.sim.basic.Event
+import gov.nist.asbestos.simapi.sim.basic.SimStore
+import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
+import gov.nist.asbestos.simapi.sim.headers.Headers
+import gov.nist.asbestos.simapi.sim.headers.HeadersUtil
+import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
-import gov.nist.asbestos.simapi.tk.simCommon.TestSession
-import groovy.json.JsonSlurper
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 
@@ -44,16 +45,18 @@ class ProxyServlet extends HttpServlet {
 
             if (!simStore)
                 return
+
             Event event = simStore.newEvent()
             event.selectRequest()
             event.putRequestBody(req.inputStream.bytes)
-            Headers headers = new Headers()
-            headers.names = req.headerNames
+            RawHeaders rawHeaders = new RawHeaders()
+            rawHeaders.names = req.headerNames
             req.headerNames.each { String name ->
                 Enumeration hdrs = req.getHeaders(name)
-                headers.headers.put(name, hdrs)
+                rawHeaders.headers.put(name, hdrs)
             }
-            event.putRequestHeader(HeadersUtil.headersAsString(headers))
+            Headers headers = HeadersUtil.parseHeaders(rawHeaders).withPathInfo(req.pathInfo).withVerb('POST')
+            event.putRequestHeader('POST ' + req.pathInfo + '\r\n' + HeadersUtil.headersAsString(rawHeaders))
 
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
@@ -69,9 +72,7 @@ class ProxyServlet extends HttpServlet {
     }
 
     void doDelete(HttpServletRequest req, HttpServletResponse resp) {
-        SimStore simStore
         try {
-            simStore = new SimStore(externalCache)
             String uri = req.requestURI.toLowerCase()
             log.info "doDelete  ${uri}"
             parseUri(uri, req, resp, true)
@@ -151,30 +152,4 @@ class ProxyServlet extends HttpServlet {
 
     }
 
-    /**
-     *
-     * @param rawRequest
-     * @param newChannelRequest
-     * @param req
-     * @return newlyCreated?
-     */
-    boolean newChannel(String rawRequest, NewChannelRequest newChannelRequest, HttpServletRequest req, SimStore simStore) {
-        assert Installation.instance().environmentExists(newChannelRequest.environment) : "Environment ${newChannelRequest.environment} does not exixt"
-        assert Installation.instance().fhirSimDbFile(new TestSession(newChannelRequest.testSession)) : "TestSession ${newChannelRequest.testSession} does not exist"
-        // TODO validate actortype
-        simStore.simId = new SimId(new TestSession(newChannelRequest.testSession), newChannelRequest.simId, newChannelRequest.actorType, newChannelRequest.environment)
-        simStore.withTransaction('create')
-        simStore.getStore(true)
-        Event event = simStore.newEvent()
-        event.selectRequest()
-        event.putRequestBody(rawRequest.bytes)
-        Headers headers = new Headers()
-        headers.names = req.headerNames
-        req.headerNames.each { String name ->
-            Enumeration hdrs = req.getHeaders(name)
-            headers.headers.put(name, hdrs)
-        }
-        event.putRequestHeader(HeadersUtil.headersAsString(headers))
-        simStore.newlyCreated
-    }
 }

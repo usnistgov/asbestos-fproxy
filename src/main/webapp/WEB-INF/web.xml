@@ -7,7 +7,7 @@
 
   <servlet>
     <servlet-name>Proxy</servlet-name>
-    <servlet-class>gov.nist.asbestos.fproxy.ProxyServlet</servlet-class>
+    <servlet-class>gov.nist.asbestos.fproxy.wrapper.ProxyServlet</servlet-class>
   </servlet>
 
   <servlet-mapping>
