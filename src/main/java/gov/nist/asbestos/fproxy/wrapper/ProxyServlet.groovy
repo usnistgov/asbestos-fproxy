@@ -1,12 +1,10 @@
 package gov.nist.asbestos.fproxy.wrapper
 
 import com.google.gwt.user.client.rpc.StackTrace
-import gov.nist.asbestos.simapi.sim.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.headers.Headers
-import gov.nist.asbestos.simapi.sim.headers.HeadersUtil
 import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
@@ -50,13 +48,12 @@ class ProxyServlet extends HttpServlet {
             event.selectRequest()
             event.putRequestBody(req.inputStream.bytes)
             RawHeaders rawHeaders = new RawHeaders()
-            rawHeaders.names = req.headerNames
-            req.headerNames.each { String name ->
-                Enumeration hdrs = req.getHeaders(name)
-                rawHeaders.headers.put(name, hdrs)
+            rawHeaders.addNames(req.headerNames)
+            rawHeaders.names.each { String name ->
+                rawHeaders.addHeaders(name, req.getHeaders(name))
             }
-            Headers headers = HeadersUtil.parseHeaders(rawHeaders).withPathInfo(req.pathInfo).withVerb('POST')
-            event.putRequestHeader('POST ' + req.pathInfo + '\r\n' + HeadersUtil.headersAsString(rawHeaders))
+            rawHeaders.uriLine = 'POST ' + req.pathInfo
+            event.putRequestHeader(rawHeaders)
 
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
@@ -88,6 +85,12 @@ class ProxyServlet extends HttpServlet {
             resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
             return
         }
+    }
+
+    void doGet(HttpServletRequest req, HttpServletResponse resp) {
+        log.info 'doGet'
+        String input = req.inputStream.text
+        log.info 'got input'
     }
 
     /**
@@ -142,8 +145,10 @@ class ProxyServlet extends HttpServlet {
             uriParts.remove(0)
         }
 
-        assert simStore.actor : "ProxyServlet: POST to ${simStore.simId} with no actor specified\n"
-        assert simStore.transaction : "ProxyServlet: POST to ${simStore.simId} actor ${simStore.actor} with no transaction specified\n"
+        if (!simStore.actor)
+            simStore.actor = 'fhir'
+        if (!simStore.transaction)
+            simStore.actor = 'post'
 
         // verify that sim exists
         simStore.getStore()  // exception if sim does not exist
