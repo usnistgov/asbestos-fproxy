@@ -1,10 +1,9 @@
 package gov.nist.asbestos.fproxy.wrapper
 
-import com.google.gwt.user.client.rpc.StackTrace
+import gov.nist.asbestos.adapter.StackTrace
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
-import gov.nist.asbestos.simapi.sim.headers.Headers
 import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
