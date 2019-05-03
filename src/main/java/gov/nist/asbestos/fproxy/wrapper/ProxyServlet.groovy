@@ -1,9 +1,12 @@
 package gov.nist.asbestos.fproxy.wrapper
 
 import gov.nist.asbestos.adapter.StackTrace
+import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
+import gov.nist.asbestos.simapi.sim.basic.Verb
+import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
 import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
@@ -38,21 +41,13 @@ class ProxyServlet extends HttpServlet {
         try {
             String uri = req.requestURI.toLowerCase()
             log.debug "doPost ${uri}"
-            SimStore simStore = parseUri(uri, req, resp, false)
-
+            SimStore simStore = parseUri(uri, req, resp, Verb.POST)
             if (!simStore)
                 return
 
             Event event = simStore.newEvent()
-            event.selectRequest()
-            event.putRequestBody(req.inputStream.bytes)
-            RawHeaders rawHeaders = new RawHeaders()
-            rawHeaders.addNames(req.headerNames)
-            rawHeaders.names.each { String name ->
-                rawHeaders.addHeaders(name, req.getHeaders(name))
-            }
-            rawHeaders.uriLine = 'POST ' + req.pathInfo
-            event.putRequestHeader(rawHeaders)
+            logRequest(event, req, Verb.POST)
+            log.info 'OK'
 
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
@@ -71,8 +66,9 @@ class ProxyServlet extends HttpServlet {
         try {
             String uri = req.requestURI.toLowerCase()
             log.info "doDelete  ${uri}"
-            parseUri(uri, req, resp, true)
+            parseUri(uri, req, resp, Verb.DELETE)
             resp.setStatus(resp.SC_OK)
+            log.info 'OK'
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
             log.error(msg)
@@ -87,9 +83,63 @@ class ProxyServlet extends HttpServlet {
     }
 
     void doGet(HttpServletRequest req, HttpServletResponse resp) {
-        log.info 'doGet'
-        String input = req.inputStream.text
-        log.info 'got input'
+        try {
+            String uri = req.requestURI.toLowerCase()
+            log.info "doGet ${uri}"
+            SimStore simStore = parseUri(uri, req, resp, Verb.GET)
+            if (!simStore)
+                return
+
+            Event event = simStore.newEvent()
+            logRequest(event, req, Verb.GET)
+
+            HttpGet getter = new HttpGet()
+            getter.get(simStore.endpoint, req.contentType)
+            logGetRequest(event, getter)
+            logResponse(event, getter)
+
+            resp.contentType = getter.responseContentType
+            resp.writer.write(getter.response)
+            log.info 'OK'
+        } catch (AssertionError e) {
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
+            return
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
+        }
+    }
+
+    def logRequest(Event event, HttpServletRequest req, Verb verb) {
+        event.selectRequest()
+        event.putRequestBody(req.inputStream.bytes)
+        RawHeaders rawHeaders = new RawHeaders()
+        rawHeaders.addNames(req.headerNames)
+        rawHeaders.names.each { String name ->
+            rawHeaders.addHeaders(name, req.getHeaders(name))
+        }
+        rawHeaders.uriLine = "${verb} ${req.pathInfo}"
+        event.putRequestHeader(rawHeaders)
+    }
+
+    def logGetRequest(Event event, HttpGet getter) {
+        event.newTask()
+        event.putRequestHeader(HeaderBuilder.parseHeaders(getter.requestHeaders))
+        event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+        event.putResponseBody(getter.response.bytes)
+    }
+
+    def logResponse(Event event, HttpGet getter) {
+        event.selectRequest()
+        event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+        if (getter.responseContentType == 'text/html')
+            event.putResponseHTMLBody(getter.response.bytes)
+        else
+            event.putResponseBody(getter.response.bytes)
     }
 
     /**
@@ -100,17 +150,17 @@ class ProxyServlet extends HttpServlet {
      * @param isDelete
      * @return SimStore
      */
-    SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, boolean isDelete) {
+    SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
         List<String> uriParts = uri.split('/') as List<String>
         SimStore simStore = new SimStore(externalCache)
 
-        if (uriParts.size() == 3 && uriParts[2] == 'prox' && !isDelete) {
+        if (uriParts.size() == 3 && uriParts[2] == 'prox' && verb != Verb.DELETE) {
             // CREATE
             // /appContext/prox
             // control channel - request to create proxy channel
 
             String rawRequest = req.inputStream.text
-            log.debug rawRequest
+            log.debug "CREATESIM ${rawRequest}"
             simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
             resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
             return null
@@ -130,7 +180,7 @@ class ProxyServlet extends HttpServlet {
 
         assert simStore.simId : "ProxyServlet: request to ${uri} - SimId must be present in URI\n"
 
-        if (isDelete) {
+        if (verb == Verb.DELETE) {
             simStore.deleteSim()
             return null
         }
@@ -140,20 +190,24 @@ class ProxyServlet extends HttpServlet {
             uriParts.remove(0)
         }
         if (!uriParts.empty) {
-            simStore.transaction = uriParts[0]
+            simStore.transaction = uriParts.join('_')
             uriParts.remove(0)
         }
 
         if (!simStore.actor)
             simStore.actor = 'fhir'
         if (!simStore.transaction)
-            simStore.actor = 'post'
+            simStore.transaction = verb
 
         // verify that sim exists
         simStore.getStore()  // exception if sim does not exist
 
+        log.debug "Sim ${simStore.simId} ${simStore.actor} ${simStore.transaction}"
+
         return simStore // expect content
 
     }
+
+
 
 }
