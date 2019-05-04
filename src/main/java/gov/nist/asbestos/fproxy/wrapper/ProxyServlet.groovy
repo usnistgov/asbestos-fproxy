@@ -93,13 +93,21 @@ class ProxyServlet extends HttpServlet {
             Event event = simStore.newEvent()
             logRequest(event, req, Verb.GET)
 
+            // key request headers
+            // accept-encoding: gzip
+            // accept: *
+
+            log.info "=> ${simStore.endpoint} ${req.contentType}"
             HttpGet getter = new HttpGet()
-            getter.get(simStore.endpoint, req.contentType)
+            getter.get(simStore.endpoint, event.requestHeaders.getAll('accept'), event.requestHeaders.getAll('accept-encoding'))
+            log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
             logGetRequest(event, getter)
             logResponse(event, getter)
 
-            resp.contentType = getter.responseContentType
-            resp.writer.write(getter.response)
+            if (getter.response) {
+                resp.contentType = getter.responseContentType
+                resp.writer.write(getter.response)
+            }
             log.info 'OK'
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
@@ -129,17 +137,22 @@ class ProxyServlet extends HttpServlet {
     def logGetRequest(Event event, HttpGet getter) {
         event.newTask()
         event.putRequestHeader(HeaderBuilder.parseHeaders(getter.requestHeaders))
-        event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
-        event.putResponseBody(getter.response.bytes)
+        if (getter.responseHeaders)
+            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+        if (getter.response)
+            event.putResponseBody(getter.response.bytes)
     }
 
     def logResponse(Event event, HttpGet getter) {
         event.selectRequest()
-        event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
-        if (getter.responseContentType == 'text/html')
-            event.putResponseHTMLBody(getter.response.bytes)
-        else
-            event.putResponseBody(getter.response.bytes)
+        if (getter.responseHeaders)
+            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+        if (getter.response) {
+            if (getter.responseContentType == 'text/html')
+                event.putResponseHTMLBody(getter.response.bytes)
+            else
+                event.putResponseBody(getter.response.bytes)
+        }
     }
 
     /**
