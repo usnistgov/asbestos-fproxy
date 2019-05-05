@@ -104,11 +104,15 @@ class ProxyServlet extends HttpServlet {
             getter.get(simStore.endpoint, event.requestHeaders.getMultiple('accept'))
             //getter.get(simStore.endpoint, event.requestHeaders.getAll('accept'), event.requestHeaders.getAll('accept-encoding'))
             log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
-            logGetRequest(event, getter)
+            logGetOperation(event, getter)
             logResponse(event, getter)
 
+
+            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeaders)
+            headers.getAll().each { String name, String value ->
+                resp.addHeader(name, value)
+            }
             if (getter.response) {
-                resp.contentType = getter.responseContentType
                 resp.outputStream.write(getter.response)
             }
             log.info 'OK'
@@ -125,7 +129,7 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    def logRequest(Event event, HttpServletRequest req, Verb verb) {
+    static logRequest(Event event, HttpServletRequest req, Verb verb) {
         event.selectRequest()
         event.putRequestBody(req.inputStream.bytes)
         RawHeaders rawHeaders = new RawHeaders()
@@ -137,31 +141,49 @@ class ProxyServlet extends HttpServlet {
         event.putRequestHeader(rawHeaders)
     }
 
-    def logGetRequest(Event event, HttpGet getter) {
+    static logGetOperation(Event event, HttpGet getter) {
         event.newTask()
         event.putRequestHeader(HeaderBuilder.parseHeaders(getter.requestHeaders))
-        if (getter.responseHeaders)
-            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
-        if (getter.response)
-            event.putResponseBody(getter.response)
+        logGetResponse(event, getter)
+//        if (getter.response) {
+//            event.putResponseBody(getter.response)
+//        }
     }
 
-    def logResponse(Event event, HttpGet getter) {
+    static logResponse(Event event, HttpGet getter) {
         event.selectRequest()
-        if (getter.responseHeaders)
-            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+        logGetResponse(event, getter)
+//        if (getter.responseHeaders)
+//            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
+//        if (getter.response) {
+//            if (getter.responseContentType == 'text/html')
+//                event.putResponseHTMLBody(getter.response)
+//            else {
+//                event.putResponseBody(getter.response)
+//                logGetResponse(event, getter)
+//                Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
+//                String encoding = hdrs.getContentEncoding()
+//                if (encoding == 'gzip') {
+//                    String txt = Gzip.unzipWithoutBase64(getter.response)
+//                    event.putResponseBodyText(txt)
+//                }
+//            }
+//        }
+    }
+
+    static logGetResponse(Event event, HttpGet getter) {
+        Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
+        event.putResponseHeader(hdrs)
+        String encoding = hdrs.getContentEncoding()
         if (getter.response) {
-            if (getter.responseContentType == 'text/html')
+            if (encoding == 'gzip') {
+                String txt = Gzip.unzipWithoutBase64(getter.response)
+                event.putResponseBodyText(txt)
+            } else if (getter.responseContentType == 'text/html') {
                 event.putResponseHTMLBody(getter.response)
-            else {
-                event.putResponseBody(getter.response)
-                Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
-                String encoding = hdrs.getContentEncoding()
-                if (encoding == 'gzip') {
-                    String txt = Gzip.unzipWithoutBase64(getter.response)
-                    event.putResponseBodyText(txt)
-                }
             }
+            event.putResponseBody(getter.response)
+
         }
     }
 
