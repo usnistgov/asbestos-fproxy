@@ -140,13 +140,13 @@ class ProxyServlet extends HttpServlet {
             uriParts.remove(0)
         }
         if (!uriParts.empty) {
-            simStore.transaction = uriParts[0]
+            simStore.resource = uriParts[0]
             uriParts.remove(0)
         }
 
         if (!simStore.actor)
             simStore.actor = 'fhir'
-        if (!simStore.transaction)
+        if (!simStore.resource)
             simStore.actor = 'post'
 
         // verify that sim exists
