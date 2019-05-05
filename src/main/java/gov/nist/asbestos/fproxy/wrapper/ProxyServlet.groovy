@@ -1,12 +1,14 @@
 package gov.nist.asbestos.fproxy.wrapper
 
 import gov.nist.asbestos.adapter.StackTrace
+import gov.nist.asbestos.simapi.http.Gzip
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.basic.Verb
 import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
+import gov.nist.asbestos.simapi.sim.headers.Headers
 import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
@@ -97,16 +99,17 @@ class ProxyServlet extends HttpServlet {
             // accept-encoding: gzip
             // accept: *
 
-            log.info "=> ${simStore.endpoint} ${req.contentType}"
+            log.info "=> ${simStore.endpoint} ${event.requestHeaders.accept}"
             HttpGet getter = new HttpGet()
-            getter.get(simStore.endpoint, event.requestHeaders.getAll('accept'), event.requestHeaders.getAll('accept-encoding'))
+            getter.get(simStore.endpoint, event.requestHeaders.getMultiple('accept'))
+            //getter.get(simStore.endpoint, event.requestHeaders.getAll('accept'), event.requestHeaders.getAll('accept-encoding'))
             log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
             logGetRequest(event, getter)
             logResponse(event, getter)
 
             if (getter.response) {
                 resp.contentType = getter.responseContentType
-                resp.writer.write(getter.response)
+                resp.outputStream.write(getter.response)
             }
             log.info 'OK'
         } catch (AssertionError e) {
@@ -140,7 +143,7 @@ class ProxyServlet extends HttpServlet {
         if (getter.responseHeaders)
             event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
         if (getter.response)
-            event.putResponseBody(getter.response.bytes)
+            event.putResponseBody(getter.response)
     }
 
     def logResponse(Event event, HttpGet getter) {
@@ -149,9 +152,16 @@ class ProxyServlet extends HttpServlet {
             event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
         if (getter.response) {
             if (getter.responseContentType == 'text/html')
-                event.putResponseHTMLBody(getter.response.bytes)
-            else
-                event.putResponseBody(getter.response.bytes)
+                event.putResponseHTMLBody(getter.response)
+            else {
+                event.putResponseBody(getter.response)
+                Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
+                String encoding = hdrs.getContentEncoding()
+                if (encoding == 'gzip') {
+                    String txt = Gzip.unzipWithoutBase64(getter.response)
+                    event.putResponseBodyText(txt)
+                }
+            }
         }
     }
 
@@ -198,24 +208,17 @@ class ProxyServlet extends HttpServlet {
             return null
         }
 
-        if (!uriParts.empty) {
-            simStore.actor = uriParts[0]
-            uriParts.remove(0)
-        }
-        if (!uriParts.empty) {
-            simStore.transaction = uriParts.join('_')
-            uriParts.remove(0)
-        }
+        //simStore.actor = 'actor'
 
-        if (!simStore.actor)
-            simStore.actor = 'fhir'
-        if (!simStore.transaction)
-            simStore.transaction = verb
+        if (!uriParts.empty) {
+            simStore.resource = uriParts[0]
+            uriParts.remove(0)
+        }
 
         // verify that sim exists
         simStore.getStore()  // exception if sim does not exist
 
-        log.debug "Sim ${simStore.simId} ${simStore.actor} ${simStore.transaction}"
+        log.debug "Sim ${simStore.simId} ${simStore.actor} ${simStore.resource}"
 
         return simStore // expect content
 
