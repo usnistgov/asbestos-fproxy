@@ -2,7 +2,9 @@ package gov.nist.asbestos.fproxy.wrapper
 
 import gov.nist.asbestos.adapter.StackTrace
 import gov.nist.asbestos.simapi.http.Gzip
+import gov.nist.asbestos.simapi.http.HttpGeneralRequest
 import gov.nist.asbestos.simapi.http.HttpGet
+import gov.nist.asbestos.simapi.http.HttpPost
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
@@ -47,8 +49,27 @@ class ProxyServlet extends HttpServlet {
             if (!simStore)
                 return
 
+            HttpPost poster = new HttpPost()
+
             Event event = simStore.newEvent()
-            logRequest(event, req, Verb.POST)
+            logRequest(event, poster, req, Verb.POST)
+
+            log.info "=> ${simStore.endpoint} ${event.requestHeaders.contentType}"
+            poster.post(simStore.endpoint, event.requestHeaders.getMultiple(['content', 'accept']))
+            log.info "==> ${poster.status} ${(poster.response) ? poster.responseContentType : 'NULL'}"
+            logOperation(event, poster)
+            logResponse(event, poster)
+
+
+            Headers headers = HeaderBuilder.parseHeaders(poster.responseHeaders)
+            headers.getAll().each { String name, String value ->
+                resp.addHeader(name, value)
+            }
+            if (poster.response) {
+                resp.outputStream.write(poster.response)
+            }
+
+
             log.info 'OK'
 
         } catch (AssertionError e) {
@@ -92,19 +113,19 @@ class ProxyServlet extends HttpServlet {
             if (!simStore)
                 return
 
+            HttpGet getter = new HttpGet()
+
             Event event = simStore.newEvent()
-            logRequest(event, req, Verb.GET)
+            logRequest(event, getter, req, Verb.GET)
 
             // key request headers
             // accept-encoding: gzip
             // accept: *
 
             log.info "=> ${simStore.endpoint} ${event.requestHeaders.accept}"
-            HttpGet getter = new HttpGet()
-            getter.get(simStore.endpoint, event.requestHeaders.getMultiple('accept'))
-            //getter.get(simStore.endpoint, event.requestHeaders.getAll('accept'), event.requestHeaders.getAll('accept-encoding'))
+            getter.get(simStore.endpoint, event.requestHeaders.getMultiple(['accept']))
             log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
-            logGetOperation(event, getter)
+            logOperation(event, getter)
             logResponse(event, getter)
 
 
@@ -129,9 +150,11 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static logRequest(Event event, HttpServletRequest req, Verb verb) {
+    static logRequest(Event event, HttpGeneralRequest http, HttpServletRequest req, Verb verb) {
         event.selectRequest()
-        event.putRequestBody(req.inputStream.bytes)
+        logRequestDetails(event, http)
+
+        event.putRequestBody(req.inputStream?.bytes)
         RawHeaders rawHeaders = new RawHeaders()
         rawHeaders.addNames(req.headerNames)
         rawHeaders.names.each { String name ->
@@ -141,49 +164,47 @@ class ProxyServlet extends HttpServlet {
         event.putRequestHeader(rawHeaders)
     }
 
-    static logGetOperation(Event event, HttpGet getter) {
+    static logOperation(Event event, HttpGeneralRequest http) {
         event.newTask()
-        event.putRequestHeader(HeaderBuilder.parseHeaders(getter.requestHeaders))
-        logGetResponse(event, getter)
-//        if (getter.response) {
-//            event.putResponseBody(getter.response)
-//        }
+        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeaders))
+        logResponseDetails(event, http)
     }
 
-    static logResponse(Event event, HttpGet getter) {
+    static logResponse(Event event, HttpGeneralRequest http) {
         event.selectRequest()
-        logGetResponse(event, getter)
-//        if (getter.responseHeaders)
-//            event.putResponseHeader(HeaderBuilder.parseHeaders(getter.responseHeaders))
-//        if (getter.response) {
-//            if (getter.responseContentType == 'text/html')
-//                event.putResponseHTMLBody(getter.response)
-//            else {
-//                event.putResponseBody(getter.response)
-//                logGetResponse(event, getter)
-//                Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
-//                String encoding = hdrs.getContentEncoding()
-//                if (encoding == 'gzip') {
-//                    String txt = Gzip.unzipWithoutBase64(getter.response)
-//                    event.putResponseBodyText(txt)
-//                }
-//            }
-//        }
+        logResponseDetails(event, http)
     }
 
-    static logGetResponse(Event event, HttpGet getter) {
-        Headers hdrs = HeaderBuilder.parseHeaders(getter.getResponseHeaders())
+    // TODO remove header processing?
+    static logResponseDetails(Event event, HttpGeneralRequest http) {
+        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeaders())
         event.putResponseHeader(hdrs)
         String encoding = hdrs.getContentEncoding()
-        if (getter.response) {
+        if (http.response) {
             if (encoding == 'gzip') {
-                String txt = Gzip.unzipWithoutBase64(getter.response)
+                String txt = Gzip.unzipWithoutBase64(http.response)
                 event.putResponseBodyText(txt)
-            } else if (getter.responseContentType == 'text/html') {
-                event.putResponseHTMLBody(getter.response)
+            } else if (http.responseContentType == 'text/html') {
+                event.putResponseHTMLBody(http.response)
             }
-            event.putResponseBody(getter.response)
+            event.putResponseBody(http.response)
+            if (event) return
+        }
+    }
 
+    // TODO remove header processing?
+    static logRequestDetails(Event event, HttpGeneralRequest http) {
+        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeaders())
+        event.putRequestHeader(hdrs)
+        String encoding = hdrs.getContentEncoding()
+        if (http.request) {
+            if (encoding == 'gzip') {
+                String txt = Gzip.unzipWithoutBase64(http.request)
+                event.putRequestBodyText(txt)
+            } else if (http.requestContentType == 'text/html') {
+                event.putRequestHTMLBody(http.request)
+            }
+            event.putRequestBody(http.request)
         }
     }
 
