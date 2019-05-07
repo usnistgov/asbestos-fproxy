@@ -44,7 +44,7 @@ class ProxyServlet extends HttpServlet {
         // http://host:port/appContext/prox/simId
 //        resp.sendError(resp.SC_BAD_GATEWAY,'done')
         try {
-            String uri = req.requestURI.toLowerCase()
+            String uri = req.requestURI //.toLowerCase()
             log.debug "doPost ${uri}"
             SimStore simStore = parseUri(uri, req, resp, Verb.POST)
             if (!simStore)
@@ -53,19 +53,34 @@ class ProxyServlet extends HttpServlet {
             HttpPost requestIn = new HttpPost()
 
             Event event = simStore.newEvent()
+            Task clientTask = event.selectClientTask()
+
+            // log input from client
             logRequestIn(event, requestIn, req, Verb.POST)
 
             log.info "=> ${simStore.endpoint} ${event.requestHeaders.contentType}"
 
+            // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
 
+            // transform input request for backend service
             HttpGeneralRequest requestOut = transformRequest(backSideTask, requestIn)
             requestOut.url = transformRequestUrl(backSideTask, requestIn)
 
+            // send request to backend service
             requestOut.run()
+
+            // log response from backend service
+            backSideTask.select()
+            backSideTask.event.putResponseHeader(requestOut.responseHeaders)
+            logResponseBody(backSideTask, requestOut)
             log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
 
+            // transform backend service response for client
             HttpGeneralRequest responseOut = transformResponse(event.selectTask(Task.REQUEST_TASK), requestOut)
+            clientTask.select()
+            clientTask.event.putResponseHeader(responseOut.responseHeaders)
+            logResponseBody(clientTask, responseOut)
 
             responseOut.responseHeaders.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
@@ -111,7 +126,7 @@ class ProxyServlet extends HttpServlet {
 
     void doGet(HttpServletRequest req, HttpServletResponse resp) {
         try {
-            String uri = req.requestURI.toLowerCase()
+            String uri = req.requestURI //.toLowerCase()
             log.info "doGet ${uri}"
             SimStore simStore = parseUri(uri, req, resp, Verb.GET)
             if (!simStore)
@@ -120,6 +135,9 @@ class ProxyServlet extends HttpServlet {
             HttpGet requestIn = new HttpGet()
 
             Event event = simStore.newEvent()
+            Task clientTask = event.selectClientTask()
+
+            // log input request from client
             logRequestIn(event, requestIn, req, Verb.GET)
             //requestIn.requestHeaders.verb = Verb.GET
             //requestIn.requestHeaders.pathInfo = req.requestURI
@@ -130,19 +148,29 @@ class ProxyServlet extends HttpServlet {
 
             log.info "=> ${simStore.endpoint} ${event.requestHeaders.accept}"
 
+            // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
 
+            // transform input request for backend service
             HttpGeneralRequest requestOut = transformRequest(backSideTask, requestIn)
             requestOut.url = transformRequestUrl(backSideTask, requestIn)
 
+            // send request to backend service
             requestOut.run()
-            backSideTask.select()
-            backSideTask.event.responseHeaders = requestOut.responseHeaders
-            logResponseBody(backSideTask, requestOut)
 
+            // log response from backend service
+            backSideTask.select()
+            backSideTask.event.putResponseHeader(requestOut.responseHeaders)
+            // TODO make this next line not seem to work
+            //backSideTask.event.responseHeaders = requestOut.responseHeaders
+            logResponseBody(backSideTask, requestOut)
             log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
 
+            // transform backend service response for client
+            clientTask.select()
             HttpGeneralRequest responseOut = transformResponse(event.selectTask(Task.REQUEST_TASK), requestOut)
+            clientTask.event.putResponseHeader(responseOut.responseHeaders)
+            logResponseBody(clientTask, responseOut)
 
             responseOut.responseHeaders.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
@@ -294,13 +322,12 @@ class ProxyServlet extends HttpServlet {
 
         requestOut.requestHeaders = thruHeaders
         requestOut.request = requestIn.request
-
-        task.select()
-        task.event.putRequestHeader(thruHeaders)
-        task.event.putRequestBody(requestIn.request)
-
         requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
         requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
+
+        task.select()
+        task.event.putRequestHeader(requestOut.requestHeaders)
+        task.event.putRequestBody(requestOut.request)
 
         requestOut
     }
@@ -311,6 +338,8 @@ class ProxyServlet extends HttpServlet {
         Headers thruHeaders = HeaderBuilder.parseHeaders(requestIn.requestHeaders.getMultiple(['content', 'accept']))
 
         requestOut.requestHeaders = thruHeaders
+        requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
+        requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
 
         task.select()
         task.event.putRequestHeader(thruHeaders)
