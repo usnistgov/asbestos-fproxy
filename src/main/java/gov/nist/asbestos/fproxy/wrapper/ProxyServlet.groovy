@@ -8,6 +8,7 @@ import gov.nist.asbestos.simapi.http.HttpPost
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
+import gov.nist.asbestos.simapi.sim.basic.Task
 import gov.nist.asbestos.simapi.sim.basic.Verb
 import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
 import gov.nist.asbestos.simapi.sim.headers.Headers
@@ -49,26 +50,29 @@ class ProxyServlet extends HttpServlet {
             if (!simStore)
                 return
 
-            HttpPost poster = new HttpPost()
+            HttpPost requestIn = new HttpPost()
 
             Event event = simStore.newEvent()
-            logRequest(event, poster, req, Verb.POST)
+            logRequestIn(event, requestIn, req, Verb.POST)
 
             log.info "=> ${simStore.endpoint} ${event.requestHeaders.contentType}"
-            poster.post(simStore.endpoint, event.requestHeaders.getMultiple(['content', 'accept']))
-            log.info "==> ${poster.status} ${(poster.response) ? poster.responseContentType : 'NULL'}"
-            logOperation(event, poster)
-            logResponse(event, poster)
 
+            Task backSideTask = event.newTask()
 
-            Headers headers = HeaderBuilder.parseHeaders(poster.responseHeaders)
-            headers.getAll().each { String name, String value ->
+            HttpGeneralRequest requestOut = transformRequest(backSideTask, requestIn)
+            requestOut.url = transformRequestUrl(backSideTask, requestIn)
+
+            requestOut.run()
+            log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
+
+            HttpGeneralRequest responseOut = transformResponse(event.selectTask(Task.REQUEST_TASK), requestOut)
+
+            responseOut.responseHeaders.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
             }
-            if (poster.response) {
-                resp.outputStream.write(poster.response)
+            if (responseOut.response) {
+                resp.outputStream.write(responseOut.response)
             }
-
 
             log.info 'OK'
 
@@ -113,29 +117,54 @@ class ProxyServlet extends HttpServlet {
             if (!simStore)
                 return
 
-            HttpGet getter = new HttpGet()
+            HttpGet requestIn = new HttpGet()
 
             Event event = simStore.newEvent()
-            logRequest(event, getter, req, Verb.GET)
+            logRequestIn(event, requestIn, req, Verb.GET)
+            //requestIn.requestHeaders.verb = Verb.GET
+            //requestIn.requestHeaders.pathInfo = req.requestURI
 
             // key request headers
             // accept-encoding: gzip
             // accept: *
 
             log.info "=> ${simStore.endpoint} ${event.requestHeaders.accept}"
-            getter.get(simStore.endpoint, event.requestHeaders.getMultiple(['accept']))
-            log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
-            logOperation(event, getter)
-            logResponse(event, getter)
 
+            Task backSideTask = event.newTask()
 
-            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeaders)
-            headers.getAll().each { String name, String value ->
+            HttpGeneralRequest requestOut = transformRequest(backSideTask, requestIn)
+            requestOut.url = transformRequestUrl(backSideTask, requestIn)
+
+            requestOut.run()
+            backSideTask.select()
+            backSideTask.event.responseHeaders = requestOut.responseHeaders
+            logResponseBody(backSideTask, requestOut)
+
+            log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
+
+            HttpGeneralRequest responseOut = transformResponse(event.selectTask(Task.REQUEST_TASK), requestOut)
+
+            responseOut.responseHeaders.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
             }
-            if (getter.response) {
-                resp.outputStream.write(getter.response)
+            if (responseOut.response) {
+                resp.outputStream.write(responseOut.response)
             }
+
+
+//            getter.get(simStore.endpoint, event.requestHeaders.getMultiple(['accept']))
+//            log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
+//            logOperation(event, getter)
+//            logResponse(event, getter)
+//
+//
+//            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeaders)
+//            headers.getAll().each { String name, String value ->
+//                resp.addHeader(name, value)
+//            }
+//            if (getter.response) {
+//                resp.outputStream.write(getter.response)
+//            }
             log.info 'OK'
         } catch (AssertionError e) {
             String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
@@ -150,62 +179,160 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static logRequest(Event event, HttpGeneralRequest http, HttpServletRequest req, Verb verb) {
+    static HttpGeneralRequest logRequestIn(Event event, HttpGeneralRequest http, HttpServletRequest req, Verb verb) {
         event.selectRequest()
-        logRequestDetails(event, http)
 
-        event.putRequestBody(req.inputStream?.bytes)
+        // Log Headers
         RawHeaders rawHeaders = new RawHeaders()
         rawHeaders.addNames(req.headerNames)
         rawHeaders.names.each { String name ->
             rawHeaders.addHeaders(name, req.getHeaders(name))
         }
         rawHeaders.uriLine = "${verb} ${req.pathInfo}"
-        event.putRequestHeader(rawHeaders)
+        Headers headers = HeaderBuilder.parseHeaders(rawHeaders)
+
+        event.putRequestHeader(headers)
+        http.requestHeaders = headers
+
+        // Log body of POST
+        if (verb == Verb.POST) {
+            logRequestBody(event, headers, http, req)
+        }
+
+        http
     }
 
-    static logOperation(Event event, HttpGeneralRequest http) {
-        event.newTask()
-        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeaders))
-        logResponseDetails(event, http)
-    }
+//    static logOperation(Event event, HttpGeneralRequest http) {
+//        event.newTask()
+//        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeaders))
+//        logResponseDetails(event, http)
+//    }
 
-    static logResponse(Event event, HttpGeneralRequest http) {
-        event.selectRequest()
-        logResponseDetails(event, http)
-    }
+//    static logResponse(Event event, HttpGeneralRequest http) {
+//        event.selectRequest()
+//        logResponseDetails(event, http)
+//    }
 
-    // TODO remove header processing?
-    static logResponseDetails(Event event, HttpGeneralRequest http) {
-        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeaders())
-        event.putResponseHeader(hdrs)
-        String encoding = hdrs.getContentEncoding()
-        if (http.response) {
-            if (encoding == 'gzip') {
-                String txt = Gzip.unzipWithoutBase64(http.response)
-                event.putResponseBodyText(txt)
-            } else if (http.responseContentType == 'text/html') {
-                event.putResponseHTMLBody(http.response)
-            }
-            event.putResponseBody(http.response)
-            if (event) return
+//    // TODO remove header processing?
+//    static logResponseDetails(Event event, HttpGeneralRequest http) {
+//        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeaders())
+//        event.putResponseHeader(hdrs)
+//        String encoding = hdrs.getContentEncoding()
+//        if (http.response) {
+//            if (encoding == 'gzip') {
+//                String txt = Gzip.unzipWithoutBase64(http.response)
+//                event.putResponseBodyText(txt)
+//            } else if (http.responseContentType == 'text/html') {
+//                event.putResponseHTMLBody(http.response)
+//            }
+//            event.putResponseBody(http.response)
+//            if (event) return
+//        }
+//    }
+
+    static logRequestBody(Event event, Headers headers, HttpGeneralRequest http, HttpServletRequest req) {
+        byte[] bytes = req.inputStream.bytes
+        event.putRequestBody(bytes)
+        http.request = bytes
+        String encoding = headers.getContentEncoding()
+        if (encoding == 'gzip') {
+            String txt = Gzip.unzipWithoutBase64(bytes)
+            event.putRequestBodyText(txt)
+            http.requestText = txt
+        } else if (headers.contentType == 'text/html') {
+            event.putRequestHTMLBody(bytes)
+            http.requestText = new String(bytes)
+        } else {
+            http.requestText = new String(bytes)
         }
     }
 
-    // TODO remove header processing?
-    static logRequestDetails(Event event, HttpGeneralRequest http) {
-        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeaders())
-        event.putRequestHeader(hdrs)
-        String encoding = hdrs.getContentEncoding()
-        if (http.request) {
-            if (encoding == 'gzip') {
-                String txt = Gzip.unzipWithoutBase64(http.request)
-                event.putRequestBodyText(txt)
-            } else if (http.requestContentType == 'text/html') {
-                event.putRequestHTMLBody(http.request)
-            }
-            event.putRequestBody(http.request)
+    static logResponseBody(Task task, HttpGeneralRequest http) {
+        task.select()
+        Headers headers = http.responseHeaders
+        byte[] bytes = http.response
+        task.event.putResponseBody(bytes)
+        String encoding = headers.getContentEncoding()
+        if (encoding == 'gzip') {
+            String txt = Gzip.unzipWithoutBase64(bytes)
+            task.event.putResponseBodyText(txt)
+            http.responseText = txt
+        } else if (headers.contentType == 'text/html') {
+            task.event.putResponseHTMLBody(bytes)
+            http.responseText = new String(bytes)
+        } else {
+            http.responseText = new String(bytes)
         }
+
+    }
+
+//    static logRequestxBody(Event event, Headers headers, HttpServletRequest req) {
+////        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeaders())
+////        event.putRequestHeader(hdrs)
+//        String encoding = headers.getContentEncoding()
+//        if (http.request) {
+//            if (encoding == 'gzip') {
+//                String txt = Gzip.unzipWithoutBase64(http.request)
+//                event.putRequestBodyText(txt)
+//            } else if (http.requestContentType == 'text/html') {
+//                event.putRequestHTMLBody(http.request)
+//            }
+//            event.putRequestBody(http.request)
+//        }
+//    }
+
+
+
+    //
+    // These  (transform*) are specific to a type of channel
+    //
+
+    static HttpGeneralRequest transformRequest(Task task, HttpPost requestIn) {
+        HttpPost requestOut = new HttpPost()
+
+        Headers thruHeaders = HeaderBuilder.parseHeaders(requestIn.requestHeaders.getMultiple(['content', 'accept']))
+
+        requestOut.requestHeaders = thruHeaders
+        requestOut.request = requestIn.request
+
+        task.select()
+        task.event.putRequestHeader(thruHeaders)
+        task.event.putRequestBody(requestIn.request)
+
+        requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
+        requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
+
+        requestOut
+    }
+
+    static HttpGeneralRequest transformRequest(Task task, HttpGet requestIn) {
+        HttpGet requestOut = new HttpGet()
+
+        Headers thruHeaders = HeaderBuilder.parseHeaders(requestIn.requestHeaders.getMultiple(['content', 'accept']))
+
+        requestOut.requestHeaders = thruHeaders
+
+        task.select()
+        task.event.putRequestHeader(thruHeaders)
+
+        requestOut
+    }
+
+    static String transformRequestUrl(Task task, HttpGeneralRequest requestIn) {
+        task.event.simStore.endpoint
+    }
+
+    static HttpGeneralRequest transformResponse(Task task, HttpGeneralRequest responseIn) {
+        HttpGeneralRequest responseOut = new HttpGet()  // here GET vs POST does not matter
+
+        responseOut.responseHeaders = responseIn.responseHeaders
+        responseOut.response = responseIn.response
+
+        task.select()
+        task.event.putResponseHeader(responseIn.responseHeaders)
+        task.event.putResponseBody(responseIn.response)
+
+        responseOut
     }
 
     /**
