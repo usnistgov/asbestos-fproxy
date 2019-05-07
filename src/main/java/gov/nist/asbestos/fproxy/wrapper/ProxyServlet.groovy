@@ -61,7 +61,7 @@ class ProxyServlet extends HttpServlet {
             logResponse(event, poster)
 
 
-            Headers headers = HeaderBuilder.parseHeaders(poster.responseHeaders)
+            Headers headers = HeaderBuilder.parseHeaders(poster.responseHeadersList)
             headers.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
             }
@@ -129,7 +129,7 @@ class ProxyServlet extends HttpServlet {
             logResponse(event, getter)
 
 
-            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeaders)
+            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeadersList)
             headers.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
             }
@@ -166,7 +166,7 @@ class ProxyServlet extends HttpServlet {
 
     static logOperation(Event event, HttpGeneralRequest http) {
         event.newTask()
-        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeaders))
+        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeadersList))
         logResponseDetails(event, http)
     }
 
@@ -177,7 +177,7 @@ class ProxyServlet extends HttpServlet {
 
     // TODO remove header processing?
     static logResponseDetails(Event event, HttpGeneralRequest http) {
-        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeaders())
+        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeadersList())
         event.putResponseHeader(hdrs)
         String encoding = hdrs.getContentEncoding()
         if (http.response) {
@@ -194,7 +194,7 @@ class ProxyServlet extends HttpServlet {
 
     // TODO remove header processing?
     static logRequestDetails(Event event, HttpGeneralRequest http) {
-        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeaders())
+        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeadersList())
         event.putRequestHeader(hdrs)
         String encoding = hdrs.getContentEncoding()
         if (http.request) {
