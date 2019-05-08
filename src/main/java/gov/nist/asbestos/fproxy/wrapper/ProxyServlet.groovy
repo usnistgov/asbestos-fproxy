@@ -345,6 +345,8 @@ SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, 
 
     assert simStore.simId : "ProxyServlet: request to ${uri} - SimId must be present in URI\n"
 
+    // the request targets a Channel
+
     if (verb == Verb.DELETE) {
         simStore.deleteSim()
         return null
