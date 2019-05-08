@@ -56,8 +56,10 @@ class ProxyServlet extends HttpServlet {
             if (!simStore)
                 return
 
+            assert simStore.isChannel() : "Proxy - POST of configuration data not allowed on ${uri}\n"
+
             String channelType = simStore.config.channelType
-            assert channelType : "Sim ${simStore.simId} does not define a Channel Type."
+            assert channelType : "Sim ${simStore.channelId} does not define a Channel Type."
             BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
             assert channel : "Cannot create Channel of type ${channelType}"
 
@@ -102,210 +104,216 @@ class ProxyServlet extends HttpServlet {
             log.info 'OK'
 
         } catch (AssertionError e) {
-        String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_FORBIDDEN)
-        return
-    } catch (Throwable t) {
-        String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
-        return
-    }
-}
-
-void doDelete(HttpServletRequest req, HttpServletResponse resp) {
-    try {
-        String uri = req.requestURI.toLowerCase()
-        log.info "doDelete  ${uri}"
-        parseUri(uri, req, resp, Verb.DELETE)
-        resp.setStatus(resp.SC_OK)
-        log.info 'OK'
-    } catch (AssertionError e) {
-        String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_FORBIDDEN)
-        return
-    } catch (Throwable t) {
-        String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
-        return
-    }
-}
-
-void doGet(HttpServletRequest req, HttpServletResponse resp) {
-    try {
-        String uri = req.requestURI //.toLowerCase()
-        log.info "doGet ${uri}"
-        SimStore simStore = parseUri(uri, req, resp, Verb.GET)
-        if (!simStore)
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
             return
-
-        String channelType = simStore.config.channelType
-        assert channelType : "Sim ${simStore.simId} does not define a Channel Type."
-        BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
-        assert channel : "Cannot create Channel of type ${channelType}"
-
-        HttpGet requestIn = new HttpGet()
-
-        Event event = simStore.newEvent()
-        Task clientTask = event.store.selectClientTask()
-
-        // log input request from client
-        logRequestIn(event, requestIn, req, Verb.GET)
-
-        // key request headers
-        // accept-encoding: gzip
-        // accept: *
-
-        log.info "=> ${simStore.endpoint} ${event.store.requestHeader.accept}"
-
-        // create new event task to manage interaction with service behind proxy
-        Task backSideTask = event.store.newTask()
-
-        // transform input request for backend service
-        HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
-        requestOut.url = transformRequestUrl(backSideTask, requestIn, channel)
-
-        // send request to backend service
-        requestOut.run()
-
-        // log response from backend service
-        backSideTask.select()
-        backSideTask.event.putResponseHeader(requestOut.responseHeaders)
-        // TODO make this next line not seem to work
-        //backSideTask.event._responseHeaders = requestOut._responseHeaders
-        logResponseBody(backSideTask, requestOut)
-        log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
-
-        // transform backend service response for client
-        clientTask.select()
-        HttpGeneralDetails responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
-
-        responseOut.responseHeaders.getAll().each { String name, String value ->
-            resp.addHeader(name, value)
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
         }
-        if (responseOut.response) {
-            resp.outputStream.write(responseOut.response)
+    }
+
+    void doDelete(HttpServletRequest req, HttpServletResponse resp) {
+        try {
+            String uri = req.requestURI.toLowerCase()
+            log.info "doDelete  ${uri}"
+            parseUri(uri, req, resp, Verb.DELETE)
+            resp.setStatus(resp.SC_OK)
+            log.info 'OK'
+        } catch (AssertionError e) {
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
+            return
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
+        }
+    }
+
+    void doGet(HttpServletRequest req, HttpServletResponse resp) {
+        try {
+            String uri = req.requestURI //.toLowerCase()
+            log.info "doGet ${uri}"
+            SimStore simStore = parseUri(uri, req, resp, Verb.GET)
+            if (!simStore)
+                return
+
+            String channelType = simStore.config.channelType
+            assert channelType : "Sim ${simStore.channelId} does not define a Channel Type."
+            BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
+            assert channel : "Cannot create Channel of type ${channelType}"
+
+            if (!simStore.isChannel()) {
+                Map<String, List<String>> parameters = getParameters(req)
+                controlRequest(simStore, uri,parameters)
+                return
+            }
+
+            HttpGet requestIn = new HttpGet()
+
+            Event event = simStore.newEvent()
+            Task clientTask = event.store.selectClientTask()
+
+            // log input request from client
+            logRequestIn(event, requestIn, req, Verb.GET)
+
+            // key request headers
+            // accept-encoding: gzip
+            // accept: *
+
+            log.info "=> ${simStore.endpoint} ${event.store.requestHeader.accept}"
+
+            // create new event task to manage interaction with service behind proxy
+            Task backSideTask = event.store.newTask()
+
+            // transform input request for backend service
+            HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
+            requestOut.url = transformRequestUrl(backSideTask, requestIn, channel)
+
+            // send request to backend service
+            requestOut.run()
+
+            // log response from backend service
+            backSideTask.select()
+            backSideTask.event.putResponseHeader(requestOut.responseHeaders)
+            // TODO make this next line not seem to work
+            //backSideTask.event._responseHeaders = requestOut._responseHeaders
+            logResponseBody(backSideTask, requestOut)
+            log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
+
+            // transform backend service response for client
+            clientTask.select()
+            HttpGeneralDetails responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
+
+            responseOut.responseHeaders.getAll().each { String name, String value ->
+                resp.addHeader(name, value)
+            }
+            if (responseOut.response) {
+                resp.outputStream.write(responseOut.response)
+            }
+
+            log.info 'OK'
+        } catch (AssertionError e) {
+            String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_FORBIDDEN)
+            return
+        } catch (Throwable t) {
+            String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
+            log.error(msg)
+            resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
+            return
+        }
+    }
+
+    static HttpGeneralDetails logRequestIn(Event event, HttpGeneralDetails http, HttpServletRequest req, Verb verb) {
+        event.store.selectRequest()
+
+        // Log Headers
+        RawHeaders rawHeaders = new RawHeaders()
+        rawHeaders.addNames(req.headerNames)
+        rawHeaders.names.each { String name ->
+            rawHeaders.addHeaders(name, req.getHeaders(name))
+        }
+        rawHeaders.uriLine = "${verb} ${req.pathInfo}"
+        Headers headers = HeaderBuilder.parseHeaders(rawHeaders)
+
+        event.store.putRequestHeader(headers)
+        http.requestHeaders = headers
+
+        // Log body of POST
+        if (verb == Verb.POST) {
+            logRequestBody(event, headers, http, req)
         }
 
-        log.info 'OK'
-    } catch (AssertionError e) {
-        String msg = "AssertionError: ${e.message}\n${StackTrace.stackTraceAsString(e)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_FORBIDDEN)
-        return
-    } catch (Throwable t) {
-        String msg = "${t.message}\n${StackTrace.stackTraceAsString(t)}"
-        log.error(msg)
-        resp.setStatus(resp.SC_INTERNAL_SERVER_ERROR)
-        return
-    }
-}
-
-static HttpGeneralDetails logRequestIn(Event event, HttpGeneralDetails http, HttpServletRequest req, Verb verb) {
-    event.store.selectRequest()
-
-    // Log Headers
-    RawHeaders rawHeaders = new RawHeaders()
-    rawHeaders.addNames(req.headerNames)
-    rawHeaders.names.each { String name ->
-        rawHeaders.addHeaders(name, req.getHeaders(name))
-    }
-    rawHeaders.uriLine = "${verb} ${req.pathInfo}"
-    Headers headers = HeaderBuilder.parseHeaders(rawHeaders)
-
-    event.store.putRequestHeader(headers)
-    http.requestHeaders = headers
-
-    // Log body of POST
-    if (verb == Verb.POST) {
-        logRequestBody(event, headers, http, req)
+        http
     }
 
-    http
-}
-
-static logRequestBody(Event event, Headers headers, HttpGeneralDetails http, HttpServletRequest req) {
-    byte[] bytes = req.inputStream.bytes
-    event.store.putRequestBody(bytes)
-    http.request = bytes
-    String encoding = headers.getContentEncoding()
-    if (encoding == 'gzip') {
-        String txt = Gzip.unzipWithoutBase64(bytes)
-        event.store.putRequestBodyText(txt)
-        http.requestText = txt
-    } else if (headers.contentType == 'text/html') {
-        event.store.putRequestHTMLBody(bytes)
-        http.requestText = new String(bytes)
-    } else {
-        http.requestText = new String(bytes)
-    }
-}
-
-static logResponseBody(Task task, HttpGeneralDetails http) {
-    task.select()
-    Headers headers = http.responseHeaders
-    byte[] bytes = http.response
-    task.event.putResponseBody(bytes)
-    String encoding = headers.getContentEncoding()
-    if (encoding == 'gzip') {
-        String txt = Gzip.unzipWithoutBase64(bytes)
-        task.event.putResponseBodyText(txt)
-        http.responseText = txt
-    } else if (headers.contentType == 'text/html') {
-        task.event.putResponseHTMLBody(bytes)
-        http.responseText = new String(bytes)
-    } else {
-        http.responseText = new String(bytes)
+    static logRequestBody(Event event, Headers headers, HttpGeneralDetails http, HttpServletRequest req) {
+        byte[] bytes = req.inputStream.bytes
+        event.store.putRequestBody(bytes)
+        http.request = bytes
+        String encoding = headers.getContentEncoding()
+        if (encoding == 'gzip') {
+            String txt = Gzip.unzipWithoutBase64(bytes)
+            event.store.putRequestBodyText(txt)
+            http.requestText = txt
+        } else if (headers.contentType == 'text/html') {
+            event.store.putRequestHTMLBody(bytes)
+            http.requestText = new String(bytes)
+        } else {
+            http.requestText = new String(bytes)
+        }
     }
 
-}
+    static logResponseBody(Task task, HttpGeneralDetails http) {
+        task.select()
+        Headers headers = http.responseHeaders
+        byte[] bytes = http.response
+        task.event.putResponseBody(bytes)
+        String encoding = headers.getContentEncoding()
+        if (encoding == 'gzip') {
+            String txt = Gzip.unzipWithoutBase64(bytes)
+            task.event.putResponseBodyText(txt)
+            http.responseText = txt
+        } else if (headers.contentType == 'text/html') {
+            task.event.putResponseHTMLBody(bytes)
+            http.responseText = new String(bytes)
+        } else {
+            http.responseText = new String(bytes)
+        }
+
+    }
 
 
-static HttpGeneralDetails transformRequest(Task task, HttpPost requestIn, BaseChannel channelTransform) {
-    HttpPost requestOut = new HttpPost()
+    static HttpGeneralDetails transformRequest(Task task, HttpPost requestIn, BaseChannel channelTransform) {
+        HttpPost requestOut = new HttpPost()
 
-    channelTransform.transformRequest(requestIn, requestOut)
+        channelTransform.transformRequest(requestIn, requestOut)
 
-    task.select()
-    task.event.putRequestHeader(requestOut.requestHeaders)
-    task.event.putRequestBody(requestOut.request)
+        task.select()
+        task.event.putRequestHeader(requestOut.requestHeaders)
+        task.event.putRequestBody(requestOut.request)
 
-    requestOut
-}
+        requestOut
+    }
 
-static HttpGeneralDetails transformRequest(Task task, HttpGet requestIn, BaseChannel channelTransform) {
-    HttpGet requestOut = new HttpGet()
+    static HttpGeneralDetails transformRequest(Task task, HttpGet requestIn, BaseChannel channelTransform) {
+        HttpGet requestOut = new HttpGet()
 
-    channelTransform.transformRequest(requestIn, requestOut)
+        channelTransform.transformRequest(requestIn, requestOut)
 
-    task.select()
-    task.event.putRequestHeader(requestOut.requestHeaders)
+        task.select()
+        task.event.putRequestHeader(requestOut.requestHeaders)
 
-    requestOut
-}
+        requestOut
+    }
 
-static String transformRequestUrl(Task task, HttpGeneralDetails requestIn, BaseChannel channelTransform) {
+    static String transformRequestUrl(Task task, HttpGeneralDetails requestIn, BaseChannel channelTransform) {
 
-    channelTransform.transformRequestUrl(task.event.simStore.endpoint, requestIn)
+        channelTransform.transformRequestUrl(task.event.simStore.endpoint, requestIn)
 
-}
+    }
 
-static HttpGeneralDetails transformResponse(Task task, HttpGeneralDetails responseIn, BaseChannel channelTransform) {
-    HttpGeneralDetails responseOut = new HttpGet()  // here GET vs POST does not matter
+    static HttpGeneralDetails transformResponse(Task task, HttpGeneralDetails responseIn, BaseChannel channelTransform) {
+        HttpGeneralDetails responseOut = new HttpGet()  // here GET vs POST does not matter
 
-    channelTransform.transformResponse(responseIn, responseOut)
+        channelTransform.transformResponse(responseIn, responseOut)
 
-    task.select()
-    task.event.putResponseHeader(responseIn.responseHeaders)
-    task.event.putResponseBody(responseIn.response)
-    task.event.putResponseHeader(responseOut.responseHeaders)
-    logResponseBody(task, responseOut)
+        task.select()
+        task.event.putResponseHeader(responseIn.responseHeaders)
+        task.event.putResponseBody(responseIn.response)
+        task.event.putResponseHeader(responseOut.responseHeaders)
+        logResponseBody(task, responseOut)
 
-    responseOut
-}
+        responseOut
+    }
 
 /**
  *
@@ -315,59 +323,99 @@ static HttpGeneralDetails transformResponse(Task task, HttpGeneralDetails respon
  * @param isDelete
  * @return SimStore
  */
-SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
-    List<String> uriParts = uri.split('/') as List<String>
-    SimStore simStore = new SimStore(externalCache)
+    SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
+        List<String> uriParts = uri.split('/') as List<String>
+        SimStore simStore = new SimStore(externalCache)
 
-    if (uriParts.size() == 3 && uriParts[2] == 'prox' && verb != Verb.DELETE) {
-        // CREATE
-        // /appContext/prox
-        // control channel - request to create proxy channel
+        if (uriParts.size() == 3 && uriParts[2] == 'prox' && verb != Verb.DELETE) {
+            // CREATE
+            // /appContext/prox
+            // control channel - request to create proxy channel
 
-        String rawRequest = req.inputStream.text
-        log.debug "CREATESIM ${rawRequest}"
-        simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
-        resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
-        return null
+            String rawRequest = req.inputStream.text
+            log.debug "CREATESIM ${rawRequest}"
+            simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
+            resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
+            return null
+        }
+
+        if (uriParts.size() >= 4) {
+            // /appContext/prox/channelId
+            if (uriParts[0] == '' && uriParts[2] == 'prox') { // no appContext
+                SimId simId = SimId.buildFromRawId(uriParts[3])
+                simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+                uriParts.remove(0)  // leasing empty string
+                uriParts.remove(0)  // appContext
+                uriParts.remove(0)  // prox
+                uriParts.remove(0)  // channelId
+            }
+        }
+
+        assert simStore.channelId : "ProxyServlet: request to ${uri} - ChannelId must be present in URI\n"
+
+        // the request targets a Channel - maybe a control message or a pass through.
+        // pass through have Channel/ as the next element of the URI
+
+        if (verb == Verb.DELETE) {
+            simStore.deleteSim()
+            return null
+        }
+
+        if (!uriParts.empty) {
+            simStore.resource = uriParts[0]
+            uriParts.remove(0)
+        }
+
+
+        //simStore.actor = 'actor'
+
+        if (!uriParts.empty) {
+            simStore.channel = uriParts[0] == 'Channel'   // Channel -> message passes through to backend system
+            uriParts.remove(0)
+        }
+
+        // verify that sim exists - only if this is a channel to a backend system
+        if (simStore.isChannel())
+            simStore.getStore()  // exception if sim does not exist
+
+        log.debug "Sim ${simStore.channelId} ${simStore.actor} ${simStore.resource}"
+
+        return simStore // expect content
+
     }
 
-    if (uriParts.size() >= 4) {
-        // /appContext/prox/simId
-        if (uriParts[0] == '' && uriParts[2] == 'prox') { // no appContext
-            SimId simId = SimId.buildFromRawId(uriParts[3])
-            simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
-            uriParts.remove(0)  // leasing empty string
-            uriParts.remove(0)  // appContext
-            uriParts.remove(0)  // prox
-            uriParts.remove(0)  // simId
+    // /appContext/prox/channelId/?
+    static void controlRequest(SimStore simStore, String uri, Map<String, List<String>> parameters) {
+        List<String> uriParts = uri.split('/') as List<String>
+        assert uriParts.size() > 4 : "Proxy control request - do not understand URI ${uri}\n"
+        (1..4).each { uriParts.remove(0) }
+
+        String type = uriParts[0]
+        uriParts.remove(0)
+
+        if (type == 'Event') {
+            eventRequest(simStore, uriParts, parameters)
+            return
+        }
+        assert true : "Proxy: Do not understand control request type ${type}\n"
+    }
+
+    static void eventRequest(SimStore simStore, List<String> uriParts, Map<String, List<String>> parameters) {
+        if (uriParts.isEmpty()) {
+            // asking for /Event  ??? - all events??? - must be some restricting parameters
+            if (parameters.hasProperty('_last')) {
+                int count = Integer.parseInt(parameters.get('_last')[0])
+            }
         }
     }
 
-    assert simStore.simId : "ProxyServlet: request to ${uri} - SimId must be present in URI\n"
-
-    // the request targets a Channel
-
-    if (verb == Verb.DELETE) {
-        simStore.deleteSim()
-        return null
+    static Map<String, List<String>> getParameters(HttpServletRequest req) {
+        Map<String, List<String>> map = [:]
+        while (req.getParameterNames().hasMoreElements()) {
+            String name = req.getParameterNames().nextElement()
+            List<String> values = req.getParameterValues(name) as List<String>
+            map[name] = values
+        }
+        map
     }
-
-    //simStore.actor = 'actor'
-
-    if (!uriParts.empty) {
-        simStore.resource = uriParts[0]
-        uriParts.remove(0)
-    }
-
-    // verify that sim exists
-    simStore.getStore()  // exception if sim does not exist
-
-    log.debug "Sim ${simStore.simId} ${simStore.actor} ${simStore.resource}"
-
-    return simStore // expect content
-
-}
-
-
-
 }
