@@ -1,11 +1,12 @@
 package gov.nist.asbestos.fproxy.support
 
-import gov.nist.asbestos.simapi.sim.basic.SimConfig
+
+import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
 
 
-class BasicChannel {
+abstract class BasicChannel {
 
-    void basicValidateConfig(SimConfig simConfig) {
+    void basicValidateConfig(ChannelConfig simConfig) {
         simConfig.extensions.with {
             ((String) getProperty('base')).with {
                 assert startsWith('http') : "Base is not a URL"
@@ -14,7 +15,7 @@ class BasicChannel {
         }
     }
 
-    String getURL(SimConfig simConfig, String transaction) {
+    String getURL(ChannelConfig simConfig, String transaction) {
         assert simConfig : "BasicChannel:getURL: simConfig is null"
         assert transaction : "BasicChannel:getURL: transaction is null"
         simConfig.extensions.transactions.with {
