@@ -7,7 +7,7 @@
   <packaging>war</packaging>
   <version>1.0-SNAPSHOT</version>
 
-  <name>fproxy Maven Webapp</name>
+  <name>Proxy</name>
 
   <url>http://maven.apache.org</url>
 
