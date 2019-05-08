@@ -58,7 +58,7 @@ class ProxyServlet extends HttpServlet {
             // log input from client
             logRequestIn(event, requestIn, req, Verb.POST)
 
-            log.info "=> ${simStore.endpoint} ${event.requestHeaders.contentType}"
+            log.info "=> ${simStore.endpoint} ${event._requestHeaders.contentType}"
 
             // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
@@ -139,14 +139,14 @@ class ProxyServlet extends HttpServlet {
 
             // log input request from client
             logRequestIn(event, requestIn, req, Verb.GET)
-            //requestIn.requestHeaders.verb = Verb.GET
-            //requestIn.requestHeaders.pathInfo = req.requestURI
+            //requestIn._requestHeaders.verb = Verb.GET
+            //requestIn._requestHeaders.pathInfo = req.requestURI
 
             // key request headers
             // accept-encoding: gzip
             // accept: *
 
-            log.info "=> ${simStore.endpoint} ${event.requestHeaders.accept}"
+            log.info "=> ${simStore.endpoint} ${event._requestHeaders.accept}"
 
             // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
@@ -162,7 +162,7 @@ class ProxyServlet extends HttpServlet {
             backSideTask.select()
             backSideTask.event.putResponseHeader(requestOut.responseHeaders)
             // TODO make this next line not seem to work
-            //backSideTask.event.responseHeaders = requestOut.responseHeaders
+            //backSideTask.event._responseHeaders = requestOut._responseHeaders
             logResponseBody(backSideTask, requestOut)
             log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
 
@@ -180,13 +180,13 @@ class ProxyServlet extends HttpServlet {
             }
 
 
-//            getter.get(simStore.endpoint, event.requestHeaders.getMultiple(['accept']))
+//            getter.get(simStore.endpoint, event._requestHeaders.getMultiple(['accept']))
 //            log.info "==> ${getter.status} ${(getter.response) ? getter.responseContentType : 'NULL'}"
 //            logOperation(event, getter)
 //            logResponse(event, getter)
 //
 //
-//            Headers headers = HeaderBuilder.parseHeaders(getter.responseHeaders)
+//            Headers headers = HeaderBuilder.parseHeaders(getter._responseHeaders)
 //            headers.getAll().each { String name, String value ->
 //                resp.addHeader(name, value)
 //            }
@@ -232,7 +232,7 @@ class ProxyServlet extends HttpServlet {
 
 //    static logOperation(Event event, HttpGeneralRequest http) {
 //        event.newTask()
-//        event.putRequestHeader(HeaderBuilder.parseHeaders(http.requestHeaders))
+//        event.putRequestHeader(HeaderBuilder.parseHeaders(http._requestHeaders))
 //        logResponseDetails(event, http)
 //    }
 
