@@ -2,7 +2,7 @@ package gov.nist.asbestos.fproxy.passthrough
 
 import gov.nist.asbestos.fproxy.support.BasicChannel
 import gov.nist.asbestos.fproxy.support.Channel
-import gov.nist.asbestos.simapi.sim.basic.Event
+import gov.nist.asbestos.simapi.sim.basic.EventStore
 import gov.nist.asbestos.simapi.sim.basic.SimConfig
 
 /*
@@ -43,7 +43,7 @@ class PassthroughChannel extends BasicChannel implements Channel {
     }
 
     @Override
-    void handle(Event event) {
+    void handle(EventStore event) {
 
     }
 }

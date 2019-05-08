@@ -5,7 +5,7 @@ import gov.nist.asbestos.simapi.http.Gzip
 import gov.nist.asbestos.simapi.http.HttpGeneralRequest
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.http.HttpPost
-import gov.nist.asbestos.simapi.sim.basic.Event
+import gov.nist.asbestos.simapi.sim.basic.EventStore
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.basic.Task
@@ -52,13 +52,13 @@ class ProxyServlet extends HttpServlet {
 
             HttpPost requestIn = new HttpPost()
 
-            Event event = simStore.newEvent()
+            EventStore event = simStore.newEvent()
             Task clientTask = event.selectClientTask()
 
             // log input from client
             logRequestIn(event, requestIn, req, Verb.POST)
 
-            log.info "=> ${simStore.endpoint} ${event._requestHeaders.contentType}"
+            log.info "=> ${simStore.endpoint} ${event.requestHeader.contentType}"
 
             // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
@@ -134,7 +134,7 @@ class ProxyServlet extends HttpServlet {
 
             HttpGet requestIn = new HttpGet()
 
-            Event event = simStore.newEvent()
+            EventStore event = simStore.newEvent()
             Task clientTask = event.selectClientTask()
 
             // log input request from client
@@ -146,7 +146,7 @@ class ProxyServlet extends HttpServlet {
             // accept-encoding: gzip
             // accept: *
 
-            log.info "=> ${simStore.endpoint} ${event._requestHeaders.accept}"
+            log.info "=> ${simStore.endpoint} ${event.requestHeader.accept}"
 
             // create new event task to manage interaction with service behind proxy
             Task backSideTask = event.newTask()
@@ -207,7 +207,7 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static HttpGeneralRequest logRequestIn(Event event, HttpGeneralRequest http, HttpServletRequest req, Verb verb) {
+    static HttpGeneralRequest logRequestIn(EventStore event, HttpGeneralRequest http, HttpServletRequest req, Verb verb) {
         event.selectRequest()
 
         // Log Headers
@@ -230,19 +230,19 @@ class ProxyServlet extends HttpServlet {
         http
     }
 
-//    static logOperation(Event event, HttpGeneralRequest http) {
+//    static logOperation(EventStore event, HttpGeneralRequest http) {
 //        event.newTask()
 //        event.putRequestHeader(HeaderBuilder.parseHeaders(http._requestHeaders))
 //        logResponseDetails(event, http)
 //    }
 
-//    static logResponse(Event event, HttpGeneralRequest http) {
+//    static logResponse(EventStore event, HttpGeneralRequest http) {
 //        event.selectRequest()
 //        logResponseDetails(event, http)
 //    }
 
 //    // TODO remove header processing?
-//    static logResponseDetails(Event event, HttpGeneralRequest http) {
+//    static logResponseDetails(EventStore event, HttpGeneralRequest http) {
 //        Headers hdrs = HeaderBuilder.parseHeaders(http.getResponseHeaders())
 //        event.putResponseHeader(hdrs)
 //        String encoding = hdrs.getContentEncoding()
@@ -258,7 +258,7 @@ class ProxyServlet extends HttpServlet {
 //        }
 //    }
 
-    static logRequestBody(Event event, Headers headers, HttpGeneralRequest http, HttpServletRequest req) {
+    static logRequestBody(EventStore event, Headers headers, HttpGeneralRequest http, HttpServletRequest req) {
         byte[] bytes = req.inputStream.bytes
         event.putRequestBody(bytes)
         http.request = bytes
@@ -294,7 +294,7 @@ class ProxyServlet extends HttpServlet {
 
     }
 
-//    static logRequestxBody(Event event, Headers headers, HttpServletRequest req) {
+//    static logRequestxBody(EventStore event, Headers headers, HttpServletRequest req) {
 ////        Headers hdrs = HeaderBuilder.parseHeaders(http.getRequestHeaders())
 ////        event.putRequestHeader(hdrs)
 //        String encoding = headers.getContentEncoding()

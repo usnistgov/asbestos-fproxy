@@ -1,6 +1,7 @@
 package gov.nist.asbestos.fproxy.support
 
-import gov.nist.asbestos.simapi.sim.basic.Event
+
+import gov.nist.asbestos.simapi.sim.basic.EventStore
 import gov.nist.asbestos.simapi.sim.basic.SimConfig
 import groovy.transform.TypeChecked
 
@@ -14,5 +15,5 @@ interface Channel {
     void teardown()
     void validateConfig(SimConfig simConfig)
     // throws Assert if error
-    void handle(Event event)
+    void handle(EventStore event)
 }
