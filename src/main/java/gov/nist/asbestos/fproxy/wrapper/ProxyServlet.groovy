@@ -396,47 +396,20 @@ class ProxyServlet extends HttpServlet {
         uriParts.remove(0)
 
         if (type == 'Event') {
-            return eventRequest(simStore, uriParts, parameters)
+            return EventRequestHandler.eventRequest(simStore, uriParts, parameters)
         }
-        assert true : "Proxy: Do not understand control request type ${type}\n"
+        assert true : "Proxy: Do not understand control request type ${type} of ${uri}\n"
     }
 
-    static String eventRequest(SimStore simStore, List<String> uriParts, Map<String, List<String>> parameters) {
-        int last = -1
-        if (uriParts.isEmpty()) {
-            // asking for /Event  ??? - all events??? - must be some restricting parameters
-            if (parameters.hasProperty('_last')) {
-                last = Integer.parseInt(parameters.get('_last')[0])
-            }
-        }
-
-        EventStoreSearch search  = new EventStoreSearch(simStore.externalCache, simStore.channelId)
-        Map<String, EventStoreItem> items = search.loadAllEventsItems() // key is eventId
-        List<String> eventIds = items.keySet().sort()
-        eventIds = eventIds.reverse()
-        if (last > -1) {
-            eventIds = eventIds.take(last)
-        }
-        List<EventStoreItem> returnItems = []
-        StringBuilder buf = new StringBuilder()
-        boolean first = true
-        buf.append('{ "events":[\n')
-        eventIds.each { String eventId ->
-            if (!first) buf.append(',')
-            first = false
-            buf.append(items[eventId].asJson())
-        }
-        buf.append('\n]}')
-        buf.toString()
-    }
 
     static Map<String, List<String>> getParameters(HttpServletRequest req) {
-        Map<String, List<String>> map = [:]
-        while (req.getParameterNames().hasMoreElements()) {
-            String name = req.getParameterNames().nextElement()
-            List<String> values = req.getParameterValues(name) as List<String>
-            map[name] = values
-        }
+        Map<String, List<String>> map = req.getParameterMap()
+//        //Enumeration enum = req.getParameterNames()
+//        while (req.getParameterNames().hasMoreElements()) {
+//            String name = req.getParameterNames().nextElement()
+//            List<String> values = req.getParameterValues(name) as List<String>
+//            map[name] = values
+//        }
         map
     }
 }
