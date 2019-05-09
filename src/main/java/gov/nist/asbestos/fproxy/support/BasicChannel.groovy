@@ -17,7 +17,7 @@ abstract class BasicChannel {
 
     String getURL(ChannelConfig simConfig, String transaction) {
         assert simConfig : "BasicChannel:getURL: simConfig is null"
-        assert transaction : "BasicChannel:getURL: transaction is null"
+        assert transaction : "BasicChannel:getURL: actor is null"
         simConfig.extensions.transactions.with {
             String value = (String) getProperty(transaction)
             if (value.startsWith('base'))

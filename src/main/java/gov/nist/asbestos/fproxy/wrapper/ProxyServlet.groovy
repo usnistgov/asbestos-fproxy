@@ -8,6 +8,8 @@ import gov.nist.asbestos.simapi.http.HttpGeneralDetails
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.http.HttpPost
 import gov.nist.asbestos.simapi.sim.basic.Event
+import gov.nist.asbestos.simapi.sim.basic.EventStoreItem
+import gov.nist.asbestos.simapi.sim.basic.EventStoreSearch
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.basic.Task
@@ -149,9 +151,11 @@ class ProxyServlet extends HttpServlet {
             BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
             assert channel : "Cannot create Channel of type ${channelType}"
 
+            // handle non-channel requests
             if (!simStore.isChannel()) {
                 Map<String, List<String>> parameters = getParameters(req)
-                controlRequest(simStore, uri,parameters)
+                String result = controlRequest(simStore, uri,parameters)
+                resp.outputStream.print(result)
                 return
             }
 
@@ -336,7 +340,8 @@ class ProxyServlet extends HttpServlet {
             log.debug "CREATESIM ${rawRequest}"
             simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
             resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
-            return null
+            log.info 'OK'
+            return null  // trigger - we are done - exit now
         }
 
         if (uriParts.size() >= 4) {
@@ -362,15 +367,12 @@ class ProxyServlet extends HttpServlet {
         }
 
         if (!uriParts.empty) {
-            simStore.resource = uriParts[0]
+            simStore.channel = uriParts[0] == 'Channel'   // Channel -> message passes through to backend system
             uriParts.remove(0)
         }
 
-
-        //simStore.actor = 'actor'
-
         if (!uriParts.empty) {
-            simStore.channel = uriParts[0] == 'Channel'   // Channel -> message passes through to backend system
+            simStore.resource = uriParts[0]
             uriParts.remove(0)
         }
 
@@ -385,7 +387,7 @@ class ProxyServlet extends HttpServlet {
     }
 
     // /appContext/prox/channelId/?
-    static void controlRequest(SimStore simStore, String uri, Map<String, List<String>> parameters) {
+    static String controlRequest(SimStore simStore, String uri, Map<String, List<String>> parameters) {
         List<String> uriParts = uri.split('/') as List<String>
         assert uriParts.size() > 4 : "Proxy control request - do not understand URI ${uri}\n"
         (1..4).each { uriParts.remove(0) }
@@ -394,19 +396,38 @@ class ProxyServlet extends HttpServlet {
         uriParts.remove(0)
 
         if (type == 'Event') {
-            eventRequest(simStore, uriParts, parameters)
-            return
+            return eventRequest(simStore, uriParts, parameters)
         }
         assert true : "Proxy: Do not understand control request type ${type}\n"
     }
 
-    static void eventRequest(SimStore simStore, List<String> uriParts, Map<String, List<String>> parameters) {
+    static String eventRequest(SimStore simStore, List<String> uriParts, Map<String, List<String>> parameters) {
+        int last = -1
         if (uriParts.isEmpty()) {
             // asking for /Event  ??? - all events??? - must be some restricting parameters
             if (parameters.hasProperty('_last')) {
-                int count = Integer.parseInt(parameters.get('_last')[0])
+                last = Integer.parseInt(parameters.get('_last')[0])
             }
         }
+
+        EventStoreSearch search  = new EventStoreSearch(simStore.externalCache, simStore.channelId)
+        Map<String, EventStoreItem> items = search.loadAllEventsItems() // key is eventId
+        List<String> eventIds = items.keySet().sort()
+        eventIds = eventIds.reverse()
+        if (last > -1) {
+            eventIds = eventIds.take(last)
+        }
+        List<EventStoreItem> returnItems = []
+        StringBuilder buf = new StringBuilder()
+        boolean first = true
+        buf.append('{ "events":[\n')
+        eventIds.each { String eventId ->
+            if (!first) buf.append(',')
+            first = false
+            buf.append(items[eventId].asJson())
+        }
+        buf.append('\n]}')
+        buf.toString()
     }
 
     static Map<String, List<String>> getParameters(HttpServletRequest req) {
