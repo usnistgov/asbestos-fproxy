@@ -2,7 +2,7 @@ package gov.nist.asbestos.fproxy.passthrough
 
 import gov.nist.asbestos.fproxy.support.BaseChannel
 import gov.nist.asbestos.fproxy.support.BasicChannel
-import gov.nist.asbestos.simapi.http.HttpGeneralDetails
+import gov.nist.asbestos.simapi.http.HttpBase
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.http.HttpPost
 import gov.nist.asbestos.simapi.sim.basic.EventStore
@@ -57,13 +57,13 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
     }
 
     @Override
-    URI transformRequestUrl(String endpoint, HttpGeneralDetails requestIn) {
+    URI transformRequestUrl(String endpoint, HttpBase requestIn) {
         assert channelConfig
         channelConfig.translateEndpointToFhirBase(requestIn.requestHeaders.pathInfo)
     }
 
     @Override
-    void transformResponse(HttpGeneralDetails responseIn, HttpGeneralDetails responseOut) {
+    void transformResponse(HttpBase responseIn, HttpBase responseOut) {
         responseOut.responseHeaders = responseIn.responseHeaders
         responseOut.response = responseIn.response
     }

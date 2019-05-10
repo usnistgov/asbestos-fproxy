@@ -5,9 +5,10 @@ import gov.nist.asbestos.adapter.StackTrace
 import gov.nist.asbestos.fproxy.passthrough.PassthroughChannel
 import gov.nist.asbestos.fproxy.support.BaseChannel
 import gov.nist.asbestos.simapi.http.Gzip
-import gov.nist.asbestos.simapi.http.HttpGeneralDetails
+import gov.nist.asbestos.simapi.http.HttpBase
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.http.HttpPost
+import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
 import gov.nist.asbestos.simapi.sim.basic.Event
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
@@ -18,6 +19,8 @@ import gov.nist.asbestos.simapi.sim.headers.Headers
 import gov.nist.asbestos.simapi.sim.headers.RawHeaders
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
+import groovy.json.JsonBuilder
+import groovy.json.JsonOutput
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 
@@ -42,12 +45,13 @@ class ProxyServlet extends HttpServlet {
         Installation.instance().externalCache = externalCache
     }
 
-    URI buildURI(HttpServletRequest req) {
-        String params = HttpGeneralDetails.parameterMapToString(req.getParameterMap())
-        if (params)
-            new URI(req.requestURI + '?' + params)
-        else
-            new URI(req.requestURI)
+    static URI buildURI(HttpServletRequest req) {
+        HttpBase.buildURI(req.requestURI, req.getParameterMap())
+//        String params = HttpBase.parameterMapToString(req.getParameterMap())
+//        if (params)
+//            new URI(req.requestURI + '?' + params)
+//        else
+//            new URI(req.requestURI)
     }
 
     void doPost(HttpServletRequest req, HttpServletResponse resp) {
@@ -88,7 +92,7 @@ class ProxyServlet extends HttpServlet {
             Task backSideTask = event.store.newTask()
 
             // transform input request for backend service
-            HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
+            HttpBase requestOut = transformRequest(backSideTask, requestIn, channel)
             requestOut.uri = transformRequestUri(backSideTask, requestIn, channel)
 
             // send request to backend service
@@ -101,7 +105,7 @@ class ProxyServlet extends HttpServlet {
             log.info "==> ${requestOut.status} ${(requestOut.response) ? requestOut.responseContentType : 'NULL'}"
 
             // transform backend service response for client
-            HttpGeneralDetails responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
+            HttpBase responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
             clientTask.select()
 
             responseOut.responseHeaders.getAll().each { String name, String value ->
@@ -189,7 +193,7 @@ class ProxyServlet extends HttpServlet {
             Task backSideTask = event.store.newTask()
 
             // transform input request for backend service
-            HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
+            HttpBase requestOut = transformRequest(backSideTask, requestIn, channel)
             requestOut.uri = transformRequestUri(backSideTask, requestIn, channel)
             requestOut.requestHeaders.pathInfo = requestOut.uri
 
@@ -206,7 +210,7 @@ class ProxyServlet extends HttpServlet {
 
             // transform backend service response for client
             clientTask.select()
-            HttpGeneralDetails responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
+            HttpBase responseOut = transformResponse(event.store.selectTask(Task.CLIENT_TASK), requestOut, channel)
 
             responseOut.responseHeaders.getAll().each { String name, String value ->
                 resp.addHeader(name, value)
@@ -229,7 +233,7 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static HttpGeneralDetails logRequestIn(Event event, HttpGeneralDetails http, HttpServletRequest req, Verb verb) {
+    static HttpBase logRequestIn(Event event, HttpBase http, HttpServletRequest req, Verb verb) {
         event.store.selectRequest()
 
         // Log Headers
@@ -238,7 +242,7 @@ class ProxyServlet extends HttpServlet {
         rawHeaders.names.each { String name ->
             rawHeaders.addHeaders(name, req.getHeaders(name))
         }
-        rawHeaders.uriLine = "${verb} ${req.pathInfo} ${HttpGeneralDetails.parameterMapToString(req.getParameterMap())}"
+        rawHeaders.uriLine = "${verb} ${req.pathInfo} ${HttpBase.parameterMapToString(req.getParameterMap())}"
         Headers headers = HeaderBuilder.parseHeaders(rawHeaders)
 
         event.store.putRequestHeader(headers)
@@ -261,7 +265,7 @@ class ProxyServlet extends HttpServlet {
         type.startsWith('text') || stringTypes.contains(type)
     }
 
-    static logRequestBody(Event event, Headers headers, HttpGeneralDetails http, HttpServletRequest req) {
+    static logRequestBody(Event event, Headers headers, HttpBase http, HttpServletRequest req) {
         byte[] bytes = req.inputStream.bytes
         event.store.putRequestBody(bytes)
         http.request = bytes
@@ -278,7 +282,7 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static logResponseBody(Task task, HttpGeneralDetails http) {
+    static logResponseBody(Task task, HttpBase http) {
         task.select()
         Headers headers = http.responseHeaders
         byte[] bytes = http.response
@@ -296,7 +300,7 @@ class ProxyServlet extends HttpServlet {
         }
     }
 
-    static HttpGeneralDetails transformRequest(Task task, HttpPost requestIn, BaseChannel channelTransform) {
+    static HttpBase transformRequest(Task task, HttpPost requestIn, BaseChannel channelTransform) {
         HttpPost requestOut = new HttpPost()
 
         channelTransform.transformRequest(requestIn, requestOut)
@@ -308,7 +312,7 @@ class ProxyServlet extends HttpServlet {
         requestOut
     }
 
-    static HttpGeneralDetails transformRequest(Task task, HttpGet requestIn, BaseChannel channelTransform) {
+    static HttpBase transformRequest(Task task, HttpGet requestIn, BaseChannel channelTransform) {
         HttpGet requestOut = new HttpGet()
 
         channelTransform.transformRequest(requestIn, requestOut)
@@ -319,14 +323,14 @@ class ProxyServlet extends HttpServlet {
         requestOut
     }
 
-    static URI transformRequestUri(Task task, HttpGeneralDetails requestIn, BaseChannel channelTransform) {
+    static URI transformRequestUri(Task task, HttpBase requestIn, BaseChannel channelTransform) {
 
         channelTransform.transformRequestUrl(task.event.simStore.endpoint, requestIn)
 
     }
 
-    static HttpGeneralDetails transformResponse(Task task, HttpGeneralDetails responseIn, BaseChannel channelTransform) {
-        HttpGeneralDetails responseOut = new HttpGet()  // here GET vs POST does not matter
+    static HttpBase transformResponse(Task task, HttpBase responseIn, BaseChannel channelTransform) {
+        HttpBase responseOut = new HttpGet()  // here GET vs POST does not matter
 
         channelTransform.transformResponse(responseIn, responseOut)
 
@@ -357,24 +361,62 @@ class ProxyServlet extends HttpServlet {
             // CREATE
             // /appContext/prox
             // control channel - request to create proxy channel
+            // can be done with GET or POST
 
-            String rawRequest = req.inputStream.text
-            log.debug "CREATESIM ${rawRequest}"
-            simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
-            resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
-            log.info 'OK'
-            return null  // trigger - we are done - exit now
+            String parmameterString = uri.getQuery()
+
+            if (verb == Verb.POST) {
+                String rawRequest = req.inputStream.text   // json
+                log.debug "CREATESIM ${rawRequest}"
+                simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(rawRequest))
+
+                resp.contentType = 'application/json'
+                resp.outputStream.print(rawRequest)
+
+
+                resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
+                log.info 'OK'
+                return null  // trigger - we are done - exit now
+            } else  if (parmameterString) {  // GET with parameters - also CREATE SIM
+                Map<String, List<String>> queryMap = HttpBase.mapFromQuery(parmameterString)
+                String json = JsonOutput.toJson(HttpBase.flattenQueryMap(queryMap))
+                simStore = SimStoreBuilder.builder(externalCache, SimStoreBuilder.buildSimConfig(json))
+
+                resp.contentType = 'application/json'
+                resp.outputStream.print(json)
+
+
+                resp.setStatus((simStore.newlyCreated ? resp.SC_CREATED : resp.SC_OK))
+                log.info 'OK'
+                return null
+            }
         }
 
         if (uriParts.size() >= 4) {
             // /appContext/prox/channelId
             if (uriParts[0] == '' && uriParts[2] == 'prox') { // no appContext
                 SimId simId = SimId.buildFromRawId(uriParts[3])
-                simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+
                 uriParts.remove(0)  // leasing empty string
                 uriParts.remove(0)  // appContext
                 uriParts.remove(0)  // prox
                 uriParts.remove(0)  // channelId
+
+                try {
+                    simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+                } catch (Throwable t) {
+                    resp.setStatus(resp.SC_NOT_FOUND)
+                    return
+                }
+                if (uriParts.empty && verb == Verb.GET) {
+                    // return channel config
+                    ChannelConfig config = simStore.config
+                    String json = new JsonBuilder(config).toPrettyString()
+                    resp.contentType = 'application/json'
+                    resp.outputStream.print(json)
+                    return
+                }
+
             }
         }
 
