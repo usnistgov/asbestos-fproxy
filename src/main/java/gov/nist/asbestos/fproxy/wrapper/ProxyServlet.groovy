@@ -1,5 +1,6 @@
 package gov.nist.asbestos.fproxy.wrapper
 
+
 import gov.nist.asbestos.adapter.StackTrace
 import gov.nist.asbestos.fproxy.passthrough.PassthroughChannel
 import gov.nist.asbestos.fproxy.support.BaseChannel
@@ -8,8 +9,6 @@ import gov.nist.asbestos.simapi.http.HttpGeneralDetails
 import gov.nist.asbestos.simapi.http.HttpGet
 import gov.nist.asbestos.simapi.http.HttpPost
 import gov.nist.asbestos.simapi.sim.basic.Event
-import gov.nist.asbestos.simapi.sim.basic.EventStoreItem
-import gov.nist.asbestos.simapi.sim.basic.EventStoreSearch
 import gov.nist.asbestos.simapi.sim.basic.SimStore
 import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
 import gov.nist.asbestos.simapi.sim.basic.Task
@@ -43,6 +42,14 @@ class ProxyServlet extends HttpServlet {
         Installation.instance().externalCache = externalCache
     }
 
+    URI buildURI(HttpServletRequest req) {
+        String params = HttpGeneralDetails.parameterMapToString(req.getParameterMap())
+        if (params)
+            new URI(req.requestURI + '?' + params)
+        else
+            new URI(req.requestURI)
+    }
+
     void doPost(HttpServletRequest req, HttpServletResponse resp) {
 
         // typical URI is
@@ -52,7 +59,8 @@ class ProxyServlet extends HttpServlet {
         // http://host:port/appContext/prox/simId
 //        resp.sendError(resp.SC_BAD_GATEWAY,'done')
         try {
-            String uri = req.requestURI
+            URI uri = buildURI(req)
+            //String uri = req.requestURI
             log.debug "doPost ${uri}"
             SimStore simStore = parseUri(uri, req, resp, Verb.POST)
             if (!simStore)
@@ -66,7 +74,6 @@ class ProxyServlet extends HttpServlet {
             assert channel : "Cannot create Channel of type ${channelType}"
 
             HttpPost requestIn = new HttpPost()
-            requestIn.parameterMap = req.getParameterMap()
 
             Event event = simStore.newEvent()
             // request from and response to client
@@ -82,7 +89,7 @@ class ProxyServlet extends HttpServlet {
 
             // transform input request for backend service
             HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
-            requestOut.url = transformRequestUrl(backSideTask, requestIn, channel)
+            requestOut.uri = transformRequestUri(backSideTask, requestIn, channel)
 
             // send request to backend service
             requestOut.run()
@@ -121,7 +128,8 @@ class ProxyServlet extends HttpServlet {
 
     void doDelete(HttpServletRequest req, HttpServletResponse resp) {
         try {
-            String uri = req.requestURI.toLowerCase()
+            URI uri = buildURI(req)
+            //String uri = req.requestURI.toLowerCase()
             log.info "doDelete  ${uri}"
             parseUri(uri, req, resp, Verb.DELETE)
             resp.setStatus(resp.SC_OK)
@@ -141,7 +149,8 @@ class ProxyServlet extends HttpServlet {
 
     void doGet(HttpServletRequest req, HttpServletResponse resp) {
         try {
-            String uri = req.requestURI //.toLowerCase()
+            URI uri = buildURI(req)
+            //String uri = req.requestURI //.toLowerCase()
             log.info "doGet ${uri}"
             SimStore simStore = parseUri(uri, req, resp, Verb.GET)
             if (!simStore)
@@ -163,7 +172,6 @@ class ProxyServlet extends HttpServlet {
             }
 
             HttpGet requestIn = new HttpGet()
-            requestIn.parameterMap = req.getParameterMap()
 
             Event event = simStore.newEvent()
             Task clientTask = event.store.selectClientTask()
@@ -182,8 +190,8 @@ class ProxyServlet extends HttpServlet {
 
             // transform input request for backend service
             HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
-            requestOut.url = transformRequestUrl(backSideTask, requestIn, channel)
-            requestOut.requestHeaders.pathInfo = requestOut.url
+            requestOut.uri = transformRequestUri(backSideTask, requestIn, channel)
+            requestOut.requestHeaders.pathInfo = requestOut.uri
 
             // send request to backend service
             requestOut.run()
@@ -230,7 +238,7 @@ class ProxyServlet extends HttpServlet {
         rawHeaders.names.each { String name ->
             rawHeaders.addHeaders(name, req.getHeaders(name))
         }
-        rawHeaders.uriLine = "${verb} ${req.pathInfo}"
+        rawHeaders.uriLine = "${verb} ${req.pathInfo} ${HttpGeneralDetails.parameterMapToString(req.getParameterMap())}"
         Headers headers = HeaderBuilder.parseHeaders(rawHeaders)
 
         event.store.putRequestHeader(headers)
@@ -311,7 +319,7 @@ class ProxyServlet extends HttpServlet {
         requestOut
     }
 
-    static String transformRequestUrl(Task task, HttpGeneralDetails requestIn, BaseChannel channelTransform) {
+    static URI transformRequestUri(Task task, HttpGeneralDetails requestIn, BaseChannel channelTransform) {
 
         channelTransform.transformRequestUrl(task.event.simStore.endpoint, requestIn)
 
@@ -341,8 +349,8 @@ class ProxyServlet extends HttpServlet {
  * @param isDelete
  * @return SimStore
  */
-    SimStore parseUri(String uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
-        List<String> uriParts = uri.split('/') as List<String>
+    SimStore parseUri(URI uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
+        List<String> uriParts = uri.path.split('/') as List<String>
         SimStore simStore = new SimStore(externalCache)
 
         if (uriParts.size() == 3 && uriParts[2] == 'prox' && verb != Verb.DELETE) {
@@ -401,8 +409,8 @@ class ProxyServlet extends HttpServlet {
     }
 
     // /appContext/prox/channelId/?
-    static String controlRequest(SimStore simStore, String uri, Map<String, List<String>> parameters) {
-        List<String> uriParts = uri.split('/') as List<String>
+    static String controlRequest(SimStore simStore, URI uri, Map<String, List<String>> parameters) {
+        List<String> uriParts = uri.path.split('/') as List<String>
         assert uriParts.size() > 4 : "Proxy control request - do not understand URI ${uri}\n"
         (1..4).each { uriParts.remove(0) }
 

@@ -9,7 +9,9 @@ import gov.nist.asbestos.simapi.sim.basic.EventStore
 import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
 import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
 import gov.nist.asbestos.simapi.sim.headers.Headers
+import groovy.transform.TypeChecked
 
+@TypeChecked
 class PassthroughChannel extends BasicChannel implements BaseChannel {
     ChannelConfig channelConfig = null
 
@@ -41,7 +43,7 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
         requestOut.request = requestIn.request
         requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
         requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
-        requestOut.parameterMap = requestIn.parameterMap
+//        requestOut.parameterMap = requestIn.parameterMap
     }
 
     @Override
@@ -51,11 +53,11 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
         requestOut.requestHeaders = thruHeaders
         requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
         requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
-        requestOut.parameterMap = requestIn.parameterMap
+//        requestOut.parameterMap = requestIn.parameterMap
     }
 
     @Override
-    String transformRequestUrl(String endpoint, HttpGeneralDetails requestIn) {
+    URI transformRequestUrl(String endpoint, HttpGeneralDetails requestIn) {
         assert channelConfig
         channelConfig.translateEndpointToFhirBase(requestIn.requestHeaders.pathInfo)
     }
