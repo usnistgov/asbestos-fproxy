@@ -11,11 +11,11 @@ import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
 import gov.nist.asbestos.simapi.sim.headers.Headers
 
 class PassthroughChannel extends BasicChannel implements BaseChannel {
-    ChannelConfig simConfig = null
+    ChannelConfig channelConfig = null
 
     @Override
     void setup(ChannelConfig simConfig) {
-        this.simConfig = simConfig
+        this.channelConfig = simConfig
     }
 
     @Override
@@ -41,6 +41,7 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
         requestOut.request = requestIn.request
         requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
         requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
+        requestOut.parameterMap = requestIn.parameterMap
     }
 
     @Override
@@ -50,11 +51,13 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
         requestOut.requestHeaders = thruHeaders
         requestOut.requestHeaders.verb = requestIn.requestHeaders.verb
         requestOut.requestHeaders.pathInfo = requestIn.requestHeaders.pathInfo
+        requestOut.parameterMap = requestIn.parameterMap
     }
 
     @Override
     String transformRequestUrl(String endpoint, HttpGeneralDetails requestIn) {
-        endpoint
+        assert channelConfig
+        channelConfig.translateEndpointToFhirBase(requestIn.requestHeaders.pathInfo)
     }
 
     @Override

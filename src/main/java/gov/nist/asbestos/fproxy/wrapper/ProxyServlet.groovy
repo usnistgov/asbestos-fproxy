@@ -66,6 +66,7 @@ class ProxyServlet extends HttpServlet {
             assert channel : "Cannot create Channel of type ${channelType}"
 
             HttpPost requestIn = new HttpPost()
+            requestIn.parameterMap = req.getParameterMap()
 
             Event event = simStore.newEvent()
             // request from and response to client
@@ -151,15 +152,18 @@ class ProxyServlet extends HttpServlet {
             BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
             assert channel : "Cannot create Channel of type ${channelType}"
 
+            channel.setup(simStore.config)
+
             // handle non-channel requests
             if (!simStore.isChannel()) {
-                Map<String, List<String>> parameters = getParameters(req)
+                Map<String, List<String>> parameters = req.getParameterMap()
                 String result = controlRequest(simStore, uri,parameters)
                 resp.outputStream.print(result)
                 return
             }
 
             HttpGet requestIn = new HttpGet()
+            requestIn.parameterMap = req.getParameterMap()
 
             Event event = simStore.newEvent()
             Task clientTask = event.store.selectClientTask()
@@ -179,6 +183,7 @@ class ProxyServlet extends HttpServlet {
             // transform input request for backend service
             HttpGeneralDetails requestOut = transformRequest(backSideTask, requestIn, channel)
             requestOut.url = transformRequestUrl(backSideTask, requestIn, channel)
+            requestOut.requestHeaders.pathInfo = requestOut.url
 
             // send request to backend service
             requestOut.run()
@@ -239,6 +244,15 @@ class ProxyServlet extends HttpServlet {
         http
     }
 
+    static List<String> stringTypes = [
+            'application/fhir+json',
+            'application/json+fhir'
+    ]
+
+    static boolean isStringType(String type) {
+        type.startsWith('text') || stringTypes.contains(type)
+    }
+
     static logRequestBody(Event event, Headers headers, HttpGeneralDetails http, HttpServletRequest req) {
         byte[] bytes = req.inputStream.bytes
         event.store.putRequestBody(bytes)
@@ -251,7 +265,7 @@ class ProxyServlet extends HttpServlet {
         } else if (headers.contentType == 'text/html') {
             event.store.putRequestHTMLBody(bytes)
             http.requestText = new String(bytes)
-        } else {
+        } else if (isStringType(headers.contentType)) {
             http.requestText = new String(bytes)
         }
     }
@@ -269,12 +283,10 @@ class ProxyServlet extends HttpServlet {
         } else if (headers.contentType == 'text/html') {
             task.event.putResponseHTMLBody(bytes)
             http.responseText = new String(bytes)
-        } else {
+        } else if (isStringType(headers.contentType)) {
             http.responseText = new String(bytes)
         }
-
     }
-
 
     static HttpGeneralDetails transformRequest(Task task, HttpPost requestIn, BaseChannel channelTransform) {
         HttpPost requestOut = new HttpPost()
@@ -310,9 +322,11 @@ class ProxyServlet extends HttpServlet {
 
         channelTransform.transformResponse(responseIn, responseOut)
 
+        responseOut.responseHeaders.removeHeader('transfer-encoding')
+
         task.select()
-        task.event.putResponseHeader(responseIn.responseHeaders)
-        task.event.putResponseBody(responseIn.response)
+        //task.event.putResponseHeader(responseIn.responseHeaders)
+        task.event.putResponseBody(responseOut.response)
         task.event.putResponseHeader(responseOut.responseHeaders)
         logResponseBody(task, responseOut)
 
@@ -401,15 +415,4 @@ class ProxyServlet extends HttpServlet {
         assert true : "Proxy: Do not understand control request type ${type} of ${uri}\n"
     }
 
-
-    static Map<String, List<String>> getParameters(HttpServletRequest req) {
-        Map<String, List<String>> map = req.getParameterMap()
-//        //Enumeration enum = req.getParameterNames()
-//        while (req.getParameterNames().hasMoreElements()) {
-//            String name = req.getParameterNames().nextElement()
-//            List<String> values = req.getParameterValues(name) as List<String>
-//            map[name] = values
-//        }
-        map
-    }
 }
