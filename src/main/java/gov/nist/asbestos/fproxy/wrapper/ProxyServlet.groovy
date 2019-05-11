@@ -72,6 +72,7 @@ class ProxyServlet extends HttpServlet {
 
             assert simStore.isChannel() : "Proxy - POST of configuration data not allowed on ${uri}\n"
 
+            // these should be redundant given what is done in parseUri()
             String channelType = simStore.config.channelType
             assert channelType : "Sim ${simStore.channelId} does not define a Channel Type."
             BaseChannel channel = (BaseChannel) proxyMap.get(channelType)
@@ -355,7 +356,7 @@ class ProxyServlet extends HttpServlet {
  */
     SimStore parseUri(URI uri, HttpServletRequest req, HttpServletResponse resp, Verb verb) {
         List<String> uriParts = uri.path.split('/') as List<String>
-        SimStore simStore = new SimStore(externalCache)
+        SimStore simStore = new SimStore(externalCache)  // temp - will be overwritten
 
         if (uriParts.size() == 3 && uriParts[2] == 'prox' && verb != Verb.DELETE) {
             // CREATE
@@ -392,10 +393,12 @@ class ProxyServlet extends HttpServlet {
             }
         }
 
+        SimId simId = null
+
         if (uriParts.size() >= 4) {
             // /appContext/prox/channelId
             if (uriParts[0] == '' && uriParts[2] == 'prox') { // no appContext
-                SimId simId = SimId.buildFromRawId(uriParts[3])
+                simId = SimId.buildFromRawId(uriParts[3])
 
                 uriParts.remove(0)  // leasing empty string
                 uriParts.remove(0)  // appContext
@@ -403,9 +406,12 @@ class ProxyServlet extends HttpServlet {
                 uriParts.remove(0)  // channelId
 
                 try {
-                    simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+                    SimStoreBuilder.sense(externalCache, simId.testSession, simId.id)
                 } catch (Throwable t) {
-                    resp.setStatus(resp.SC_NOT_FOUND)
+                    if (verb == Verb.DELETE)
+                        resp.setStatus(resp.SC_OK)
+                    else
+                        resp.setStatus(resp.SC_NOT_FOUND)
                     return
                 }
                 if (uriParts.empty && verb == Verb.GET) {
@@ -416,29 +422,47 @@ class ProxyServlet extends HttpServlet {
                     resp.outputStream.print(json)
                     return
                 }
-
             }
         }
 
+        //
+        // everything above this is handling control operations
+        // starting with this build of simStore, normal channel operations begin
+        //
+
+        simStore = SimStoreBuilder.sense(externalCache, simId.testSession, simId.id)
+
+        if (verb == Verb.DELETE) {
+            boolean status = simStore.deleteSim()
+            assert status : "Proxy: Delete of ${simId} failed"
+            return null
+        }
+
+        simStore = SimStoreBuilder.loader(externalCache, simId.testSession, simId.id)
+
         assert simStore.channelId : "ProxyServlet: request to ${uri} - ChannelId must be present in URI\n"
+
+        // ChannelId has been established - from now all errors result in Event logging
+
+
 
         // the request targets a Channel - maybe a control message or a pass through.
         // pass through have Channel/ as the next element of the URI
 
-        if (verb == Verb.DELETE) {
-            simStore.deleteSim()
-            return null
-        }
 
         if (!uriParts.empty) {
             simStore.channel = uriParts[0] == 'Channel'   // Channel -> message passes through to backend system
             uriParts.remove(0)
         }
 
+//        assert simStore.isChannel() : "Proxy: Bad URL ${uri} - Channel/ must be present"
+
         if (!uriParts.empty) {
             simStore.resource = uriParts[0]
             uriParts.remove(0)
         }
+
+//        assert simStore.resource : "Proxy: no resource specified ${uri}"
 
         // verify that sim exists - only if this is a channel to a backend system
         if (simStore.isChannel())
