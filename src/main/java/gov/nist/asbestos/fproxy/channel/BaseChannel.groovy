@@ -1,8 +1,8 @@
-package gov.nist.asbestos.fproxy.support
+package gov.nist.asbestos.fproxy.channel
 
-import gov.nist.asbestos.simapi.http.HttpBase
-import gov.nist.asbestos.simapi.http.HttpGet
-import gov.nist.asbestos.simapi.http.HttpPost
+import gov.nist.asbestos.simapi.http.operations.HttpBase
+import gov.nist.asbestos.simapi.http.operations.HttpGet
+import gov.nist.asbestos.simapi.http.operations.HttpPost
 
 interface BaseChannel extends ChannelControl {
     void transformRequest(HttpPost requestIn, HttpPost requestOut)

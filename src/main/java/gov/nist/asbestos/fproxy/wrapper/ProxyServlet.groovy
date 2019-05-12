@@ -2,21 +2,21 @@ package gov.nist.asbestos.fproxy.wrapper
 
 
 import gov.nist.asbestos.adapter.StackTrace
-import gov.nist.asbestos.fproxy.passthrough.PassthroughChannel
-import gov.nist.asbestos.fproxy.support.BaseChannel
-import gov.nist.asbestos.simapi.http.Gzip
-import gov.nist.asbestos.simapi.http.HttpBase
-import gov.nist.asbestos.simapi.http.HttpGet
-import gov.nist.asbestos.simapi.http.HttpPost
-import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
-import gov.nist.asbestos.simapi.sim.basic.Event
-import gov.nist.asbestos.simapi.sim.basic.SimStore
-import gov.nist.asbestos.simapi.sim.basic.SimStoreBuilder
-import gov.nist.asbestos.simapi.sim.basic.Task
-import gov.nist.asbestos.simapi.sim.basic.Verb
-import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
-import gov.nist.asbestos.simapi.sim.headers.Headers
-import gov.nist.asbestos.simapi.sim.headers.RawHeaders
+import gov.nist.asbestos.fproxy.channel.BaseChannel
+import gov.nist.asbestos.fproxy.channel.ChannelConfig
+import gov.nist.asbestos.fproxy.channels.passthrough.PassthroughChannel
+import gov.nist.asbestos.fproxy.events.Event
+import gov.nist.asbestos.fproxy.log.SimStore
+import gov.nist.asbestos.fproxy.log.SimStoreBuilder
+import gov.nist.asbestos.fproxy.log.Task
+import gov.nist.asbestos.simapi.http.operations.Gzip
+import gov.nist.asbestos.simapi.http.operations.HttpBase
+import gov.nist.asbestos.simapi.http.operations.HttpGet
+import gov.nist.asbestos.simapi.http.operations.HttpPost
+import gov.nist.asbestos.simapi.http.headers.HeaderBuilder
+import gov.nist.asbestos.simapi.http.headers.Headers
+import gov.nist.asbestos.simapi.http.headers.RawHeaders
+import gov.nist.asbestos.simapi.http.operations.Verb
 import gov.nist.asbestos.simapi.tk.installation.Installation
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
 import groovy.json.JsonBuilder
@@ -464,9 +464,9 @@ class ProxyServlet extends HttpServlet {
 
 //        assert simStore.resource : "Proxy: no resource specified ${uri}"
 
-        // verify that sim exists - only if this is a channel to a backend system
+        // verify that proxy exists - only if this is a channel to a backend system
         if (simStore.isChannel())
-            simStore.getStore()  // exception if sim does not exist
+            simStore.getStore()  // exception if proxy does not exist
 
         log.debug "Sim ${simStore.channelId} ${simStore.actor} ${simStore.resource}"
 

@@ -1,8 +1,6 @@
-package gov.nist.asbestos.fproxy.support
+package gov.nist.asbestos.fproxy.channel
 
-
-import gov.nist.asbestos.simapi.sim.basic.EventStore
-import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
+import gov.nist.asbestos.fproxy.events.EventStore
 import groovy.transform.TypeChecked
 
 /**

@@ -1,9 +1,11 @@
 package gov.nist.asbestos.fproxy.wrapper
 
-import gov.nist.asbestos.simapi.sim.basic.EventStoreItem
-import gov.nist.asbestos.simapi.sim.basic.EventStoreSearch
-import gov.nist.asbestos.simapi.sim.basic.SimStore
+import gov.nist.asbestos.fproxy.events.EventStoreItem
+import gov.nist.asbestos.fproxy.events.EventStoreSearch
+import gov.nist.asbestos.fproxy.log.SimStore
+import groovy.transform.TypeChecked
 
+@TypeChecked
 class EventRequestHandler {
 
     static String eventRequest(SimStore simStore, List<String> uriParts, Map<String, List<String>> parameters) {
@@ -11,7 +13,7 @@ class EventRequestHandler {
         if (uriParts.isEmpty()) {
             // asking for /Event  ??? - all events??? - must be some restricting parameters
             if (parameters.containsKey('_last')) {   //}   hasProperty('_last')) {
-                String[] lasts = parameters.get('_last')
+                List<String> lasts = parameters.get('_last')
                 last = Integer.parseInt(lasts[0])
             }
         }

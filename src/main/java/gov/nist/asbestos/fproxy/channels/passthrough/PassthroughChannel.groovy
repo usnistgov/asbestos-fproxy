@@ -1,18 +1,17 @@
-package gov.nist.asbestos.fproxy.passthrough
+package gov.nist.asbestos.fproxy.channels.passthrough
 
-import gov.nist.asbestos.fproxy.support.BaseChannel
-import gov.nist.asbestos.fproxy.support.BasicChannel
-import gov.nist.asbestos.simapi.http.HttpBase
-import gov.nist.asbestos.simapi.http.HttpGet
-import gov.nist.asbestos.simapi.http.HttpPost
-import gov.nist.asbestos.simapi.sim.basic.EventStore
-import gov.nist.asbestos.simapi.sim.basic.ChannelConfig
-import gov.nist.asbestos.simapi.sim.headers.HeaderBuilder
-import gov.nist.asbestos.simapi.sim.headers.Headers
+import gov.nist.asbestos.fproxy.channel.BaseChannel
+import gov.nist.asbestos.fproxy.channel.ChannelConfig
+import gov.nist.asbestos.fproxy.events.EventStore
+import gov.nist.asbestos.simapi.http.operations.HttpBase
+import gov.nist.asbestos.simapi.http.operations.HttpGet
+import gov.nist.asbestos.simapi.http.operations.HttpPost
+import gov.nist.asbestos.simapi.http.headers.HeaderBuilder
+import gov.nist.asbestos.simapi.http.headers.Headers
 import groovy.transform.TypeChecked
 
 @TypeChecked
-class PassthroughChannel extends BasicChannel implements BaseChannel {
+class PassthroughChannel implements BaseChannel {
     ChannelConfig channelConfig = null
 
     @Override
@@ -27,7 +26,6 @@ class PassthroughChannel extends BasicChannel implements BaseChannel {
 
     @Override
     void validateConfig(ChannelConfig simConfig) {
-        basicValidateConfig(simConfig)
     }
 
     @Override
