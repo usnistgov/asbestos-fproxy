@@ -1,8 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
 import ca.uhn.fhir.context.FhirContext
-import gov.nist.toolkit.fhir.server.utility.UriBuilder
-import gov.nist.toolkit.utilities.io.Io
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 import org.hl7.fhir.instance.model.api.IBaseResource
@@ -41,7 +39,7 @@ class FileSystemResourceCache implements ResourceCache {
     private File cacheFile(URI relativeUrl, fileType) {
         assert ResourceMgr.isRelative(relativeUrl)
         def type = ResourceMgr.resourceTypeFromUrl(relativeUrl)
-        def id = ResourceMgr.id(relativeUrl) + ((fileType) ? ".${fileType}" : '')
+        def id = UriBuilder.getId(relativeUrl) + ((fileType) ? ".${fileType}" : '')
         return new File(new File(cacheDir, type), id)
     }
 }

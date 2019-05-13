@@ -1,7 +1,5 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
-import gov.nist.toolkit.fhir.server.utility.UriBuilder
-import gov.nist.toolkit.installation.server.Installation
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 import org.hl7.fhir.instance.model.api.IBaseResource

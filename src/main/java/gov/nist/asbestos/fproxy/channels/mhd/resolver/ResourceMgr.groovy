@@ -1,7 +1,13 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
+import gov.nist.asbestos.fproxy.Base.Base
+import gov.nist.asbestos.fproxy.Base.FhirClient
+import gov.nist.asbestos.fproxy.Base.LoadedResource
 import gov.nist.asbestos.simapi.tk.util.UuidAllocator
+import gov.nist.asbestos.simapi.validation.Val
+import gov.nist.asbestos.simapi.validation.ValidationReport
 import groovy.transform.TypeChecked
+import org.apache.http.client.utils.URIBuilder
 import org.apache.log4j.Logger
 import org.hl7.fhir.dstu3.model.Bundle
 import org.hl7.fhir.dstu3.model.DocumentManifest
@@ -23,59 +29,27 @@ class ResourceMgr {
     int newIdCounter = 1
 
     // for current resource
-    Map<URI, Resource> containedResources = [:]
+    Map<URI, IBaseResource> containedResources = [:]
     URI fullUrl
 
     // resource cache mgr
     ResourceCacheMgr resourceCacheMgr = null
 
-    ErrorRecorder er = null;
+    ValidationReport validationReport
+    Val topVal
 
-    class InternalLogger {
-        ErrorRecorder er
-        Logger logger
-
-        InternalLogger(ErrorRecorder er, Logger logger) {
-            this.er = er
-            this.logger = logger
-        }
-        def info(String msg) {
-            logger.info(msg)
-            er?.detail(msg)
-        }
-        def error(String msg) {
-            logger.error(msg)
-            er?.err(XdsErrorCode.Code.NoCode, msg, "", "")
-        }
-        def warn(String msg) {
-            logger.warn(msg)
-            er?.warning(XdsErrorCode.Code.NoCode, msg, "", "")
-        }
-        def fatal(String msg) {
-            logger.fatal(msg)
-            er?.err(XdsErrorCode.Code.NoCode, msg, "", "")
-        }
-    }
-
-    InternalLogger logger
-
-
-    ResourceMgr() {
-        er = null
-        logger = new InternalLogger(er, logger1)
-    }
-
-    ResourceMgr(Bundle bundle, ErrorRecorder er) {
+    ResourceMgr(Bundle bundle, ValidationReport validationReport) {
         this.bundle = bundle
-        this.er = er;
-        logger = new InternalLogger(er, logger1)
+        this.validationReport = validationReport
+        topVal = new Val()
+        validationReport.add(topVal)
         if (bundle)
             parseBundle()
     }
 
-    ResourceMgr(Map<URI, IBaseResource> resourceMap, ErrorRecorder er) {
-        this.er = er;
-        logger = new InternalLogger(er, logger1)
+    ResourceMgr(Map<URI, Resource> resourceMap, ValidationReport validationReport) {
+        this.validationReport = validationReport
+        validationReport.add(topVal)
         parseResourceMap(resourceMap)
     }
 
@@ -83,30 +57,28 @@ class ResourceMgr {
         this.resourceCacheMgr = resourceCacheMgr
     }
 
-    def parseResourceMap(Map<URI, IBaseResource> resourceMap) {
-        resourceMap.each { URI fullUrl, IBaseResource res ->
+    def parseResourceMap(Map<URI, Resource> resourceMap) {
+        resourceMap.each { URI fullUrl, Resource res ->
             assignId(res)
             addResource(fullUrl, res)
         }
     }
 
     def parseBundle() {
-        logger.info("Load Bundle...")
+        Val thisVal = topVal.addSection("Load Bundle...")
         bundle.getEntry().each { Bundle.BundleEntryComponent component ->
             if (component.hasResource()) {
                 assignId(component.getResource())
-                logger.info("...${component.fullUrl}")
-                def duplicate = addResource(component.fullUrl, component.getResource())
+                thisVal.add("...${component.fullUrl}")
+                def duplicate = addResource(new URI(component.fullUrl), component.getResource())
                 assert !duplicate, "Duplicate entry in bundle - URL is ${component.fullUrl}"
             }
         }
-        if (er) {
-            er.sectionHeading('Load Resources')
-            er.detail(toString())
-        }
+            Val r = thisVal.addSection('Load Resources')
+            r.msg(toString())
     }
 
-    def currentResource(resource) {
+    def currentResource(Resource resource) {
         clearContainedResources()
         assert resource instanceof DomainResource
         def contained = resource.contained
@@ -118,28 +90,10 @@ class ResourceMgr {
         fullUrl = url(resource)
     }
 
-    def hexChars = ('0'..'9') + ('a'..'f')
-    boolean isUUID(String u) {
-        if (u.startsWith('urn:uuid:')) return true
-        try {
-            int total = 0
-            total += (0..7).sum { (hexChars.contains(u[it])) ? 0 : 1 }
-            total += (9..12).sum { (hexChars.contains(u[it])) ? 0 : 1 }
-            total += (14..17).sum { (hexChars.contains(u[it])) ? 0 : 1 }
-            total += (19..22).sum { (hexChars.contains(u[it])) ? 0 : 1 }
-            total += (24..35).sum { (hexChars.contains(u[it])) ? 0 : 1 }
-            total += (u[8]) ? 0 : 1
-            total += (u[13]) ? 0 : 1
-            total += (u[18]) ? 0 : 1
-            total += (u[23]) ? 0 : 1
-            return total == 0
-        } catch (Exception e) {
-            return false
-        }
-    }
+
 
     String assignId(Resource resource) {
-        if (!resource.id || isUUID(resource.id)) {
+        if (!resource.id || Base.isUUID(resource.id)) {
             if (resource instanceof DocumentReference)
                 resource.id = UuidAllocator.allocate()
             else if (resource instanceof DocumentManifest)
@@ -176,15 +130,13 @@ class ResourceMgr {
      * @param resource
      * @return already present
      */
-    boolean addResource(url, IBaseResource resource) {
-        if (url instanceof String)
-            url = UriBuilder.build(url)
+    boolean addResource(URI url, IBaseResource resource) {
         boolean duplicate = resources.containsKey(url)
         resources[url] = resource
         return duplicate
     }
 
-    def addContainedResource(resource) {
+    def addContainedResource(IBaseResource resource) {
         assert resource instanceof DomainResource
         def id = UriBuilder.build(resource.id)
         boolean duplicate = containedResources.containsKey(id)
@@ -196,7 +148,7 @@ class ResourceMgr {
         containedResources = [:]
     }
 
-    def getContainedResource(id) {
+    IBaseResource getContainedResource(URI id) {
         assert id
         return containedResources[id]
     }
@@ -222,7 +174,7 @@ class ResourceMgr {
         resolveReference(fullUrl, referenceUrl, new ResolverConfig())
     }
 
-    def resolveReference(containingUrl, referenceUrl) {
+    def resolveReference(URI containingUrl, URI referenceUrl) {
         resolveReference(containingUrl, referenceUrl, new ResolverConfig())
     }
 
@@ -233,38 +185,32 @@ class ResourceMgr {
      * @return [url, Resource]
      */
     // TODO - needs toughening - containingURL could be null if referenceURL is absolute
-    def resolveReference(containingUrl, referenceUrl, ResolverConfig config) {
+    LoadedResource resolveReference(URI containingUrl, URI referenceUrl, ResolverConfig config) {
         assert referenceUrl, "Reference from ${containingUrl} is null"
-        logger.info("Resolver: Resolve URL ${referenceUrl}... ${config}")
-
-        if (containingUrl instanceof String)
-            containingUrl = UriBuilder.build(containingUrl)
-        if (referenceUrl && (referenceUrl instanceof String))
-            referenceUrl = UriBuilder.build(referenceUrl)
+        Val thisVal = topVal.addSection("Resolver: Resolve URL ${referenceUrl}... ${config}")
 
         if (config.containedRequired || (config.containedOk && referenceUrl.toString().startsWith('#'))) {
             if (config.relativeReferenceOk && referenceUrl.toString().startsWith('#') && config.containedOk) {
-                def res = getContainedResource(referenceUrl)
-                logger.info("Resolver: ...contained")
-                return [referenceUrl, res]
+                IBaseResource res = getContainedResource(referenceUrl)
+                thisVal.msg("Resolver: ...contained")
+                return new LoadedResource(referenceUrl, res)
             }
-            return [null, null]
+            return new LoadedResource(null, null)
         }
         if (!config.externalRequired) {
             if (config.relativeReferenceOk && referenceUrl.toString().startsWith('#') && config.containedOk) {
                 def res = getContainedResource(referenceUrl)
-                def val = [referenceUrl, res]
-                logger.info("Resolver: ...contained")
-                return val
+                thisVal.msg("Resolver: ...contained")
+                return new LoadedResource(referenceUrl, res)
             }
             if (resources[referenceUrl]) {
-                logger.info("Resolver: ...in bundle")
-                return [referenceUrl, resources[referenceUrl]]
+                thisVal.msg("Resolver: ...in bundle")
+                return new LoadedResource(referenceUrl, resources[referenceUrl])
             }
             def isRelativeReference = isRelative(referenceUrl)
             if (config.relativeReferenceRequired && !isRelativeReference) {
-                logger.warn("Resolver: ...relative reference required - not relative")
-                return [null, null]
+                thisVal.msg("Resolver: ...relative reference required - not relative")
+                return new LoadedResource(null, null)
             }
             def type = resourceTypeFromUrl(referenceUrl)
             // TODO - isAbsolute does an assert on containingUrl... here is why... if we have gotten to this point...
@@ -280,134 +226,84 @@ class ResourceMgr {
                     key.toString().endsWith(referenceUrl.toString())
                 }
                 if (x) {
-                    logger.info("Resolver: ...found via relative reference")
-                    return [x.key, x.value]
+                    thisVal.msg("Resolver: ...found via relative reference")
+                    return new LoadedResource(x.key, x.value)
                 }
             }
             if (isAbsolute(containingUrl) && isRelative(referenceUrl)) {
-                URI url = rebase(containingUrl, referenceUrl)
+                URI url = UriBuilder.rebase(containingUrl, referenceUrl)
                 if (resources[url]) {
-                    logger.info("Resolver: ...found in bundle")
-                    return [url, resources[url]]
+                    thisVal.msg("Resolver: ...found in bundle")
+                    return new LoadedResource(url, resources[url])
                 }
                 if (resourceCacheMgr) {
-                    logger.info("Resolver: ...looking in Resource Cache")
+                    thisVal.msg("Resolver: ...looking in Resource Cache")
                     def resource = resourceCacheMgr.getResource(url)
                     if (resource) {
-                        logger.info("Resolver: ...returned from cache")
-                        return [url, resource]
+                        thisVal.msg("Resolver: ...returned from cache")
+                        return new LoadedResource(url, resource)
                     }
                 } else
-                    logger.info("Resource Cache not configured")
+                    thisVal.msg("Resource Cache not configured")
             }
         }
 
         // external
         if (!config.internalRequired && isAbsolute(referenceUrl)) {
             if (resourceCacheMgr) {
-                logger.info("Resolver: ...looking in Resource Cache")
-                def resource
-                try {
-                    resource = resourceCacheMgr.getResource(referenceUrl)
-                } catch (Exception e) {
-                    ;
-                }
+                thisVal.msg("Resolver: ...looking in Resource Cache")
+                IBaseResource resource = resourceCacheMgr.getResource(referenceUrl)
                 if (resource) {
-                    logger.info("Resolver: ...returned from cache")
-                    return [referenceUrl, resource]
+                    thisVal.msg("Resolver: ...returned from cache")
+                    return new LoadedResource(referenceUrl, resource)
                 }
-            } else
-                logger.info("Resource Cache not configured")
-            try {
-                IBaseResource res
-                try {
-                    res = FhirClient.readResource(referenceUrl)
-                } catch (Exception e) {
-                    ;
-                }
-                if (res) {
-                    logger.info("Resolver: ...found")
-                    return [referenceUrl, res]
-                }
+            } else {
+                thisVal.msg("Resource Cache not configured")
             }
-            catch (Exception e) {
-                logger.warn("Resolver: ${referenceUrl} ...not available")
+            IBaseResource res = FhirClient.readResource(referenceUrl)
+            if (res) {
+                thisVal.msg("Resolver: ...found")
+                return new LoadedResource(referenceUrl, res)
+            } else {
+                thisVal.msg("Resolver: ${referenceUrl} ...not available")
+                return new LoadedResource(null, null)
             }
         }
 
-        logger.warn("Resolver: ...failed")
-        [null, null]
+        thisVal.err("Resolver: ...failed")
+        new LoadedResource(null, null)
     }
 
     static URI rebase(URI containingUrl, referenceUrl) {
 //        if (containingUrl) containingUrl = containingUrl.toString()
         if (referenceUrl) referenceUrl = referenceUrl.toString()
-        UriBuilder.build(baseUrlFromUrl(containingUrl).toString() + '/' + referenceUrl)
+        UriBuilder.build(UriBuilder.getBase(containingUrl).toString() + '/' + referenceUrl)
     }
 
-    static String resourceTypeFromUrl(fullUrl) {
+    static String resourceTypeFromUrl(URI fullUrl) {
         assert fullUrl
-        fullUrl = fullUrl.toString()
-        if (fullUrl.startsWith('#')) return null
-        fullUrl.reverse().split('/')[1].reverse()
+        UriBuilder.getResourceType(fullUrl)
     }
 
     static String resourceIdFromUrl(String fullUrl) {
         fullUrl.reverse().split('/')[0].reverse()
     }
 
-    static URI relativeUrl(fullUrl) {
-        fullUrl = fullUrl.toString()
-        String[] parts = fullUrl.split('/')
-        UriBuilder.build([parts[parts.size() - 2], parts[parts.size() - 1]].join('/'))
+    static URI relativeUrl(URI fullUrl) {
+        UriBuilder.getRelative(fullUrl)
     }
 
-    static id(url) {
-        url = url.toString()
-        String[] parts = url.split('/')
-        return parts[parts.size() - 1]
+    static String id(URI url) {
+        UriBuilder.getId(url)
     }
 
-    static withNewId(fullUrl, newid) {
-        def base = baseUrlFromUrl(fullUrl)
-        def rel = relativeUrl(fullUrl)
-        def type = resourceTypeFromUrl(fullUrl)
-        return base + '/' + type + '/' + newid
+    static boolean isRelative(URI url) {
+        !isAbsolute(url)
     }
 
-    /**
-     * strips off id and resource type
-     * @param fullUrl - fhirBase + ResourceType + id
-     * @return
-     */
-    static URI baseUrlFromUrl(URI fullUrl) {
-        if (fullUrl.toString().startsWith('urn')) return fullUrl
-        assert fullUrl.toString().startsWith('http')
-        List<String> parts = fullUrl.toString().split('/') as List<String>
-        parts.remove(parts.size() - 1)
-        parts.remove(parts.size() - 1)
-        UriBuilder.build(parts.join('/'))
-    }
-
-    static boolean isRelative(url) {
+    static boolean isAbsolute(URI url) {
         assert url
-        url = url.toString()
-        url && !url.startsWith('http') && url.split('\\/').size() ==2
-    }
-
-    static boolean isAbsolute(url) {
-        assert url
-        url.toString().startsWith('http')
-    }
-
-    /**
-     *
-     * @param id
-     * @return [Resource]
-     */
-    def resolveId(id) {
-        assert id
-        return resources.values().find { it.id == id }
+        url.isAbsolute()
     }
 
 }

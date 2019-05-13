@@ -1,8 +1,7 @@
-package gov.nist.asbestos.simapi.http.headers
+package gov.nist.asbestos.fproxy.events
 
 import gov.nist.asbestos.fproxy.channel.ChannelConfig
 import gov.nist.asbestos.fproxy.channel.SimConfigMapper
-import gov.nist.asbestos.fproxy.events.Event
 import gov.nist.asbestos.fproxy.log.SimStore
 import gov.nist.asbestos.fproxy.log.SimStoreBuilder
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
