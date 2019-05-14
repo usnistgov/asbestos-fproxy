@@ -1,17 +1,36 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
 import groovy.transform.TypeChecked
+import org.hl7.fhir.instance.model.api.IBaseResource
 
 @TypeChecked
 class Ref {
     URI uri
+    IBaseResource resource = null
 
     Ref(URI uri) {
+        assert uri
         this.uri = uri
     }
 
     Ref(String ref) {
+        assert ref != null  // may be ''
         uri = build(ref)
+    }
+
+    Ref(Ref ref) {
+        this.uri = ref.uri
+    }
+
+    // TODO implement
+    boolean isLoadable() {
+        false
+    }
+
+    // TODO implement
+    IBaseResource load() {
+        if (!isLoadable()) return null
+        null
     }
 
     String getId() {
@@ -34,33 +53,41 @@ class Ref {
         null
     }
 
-    String getRelative() {  // without base
+    Ref getRelative() {  // without base
         String path = uri.path
         List<String> parts = path.split('/') as List<String>
         for (int i=0; i<parts.size(); i++) {
             if (resourceNames.contains(parts[i]))
-                return parts.subList(i, parts.size()).join('/')
+                return new Ref(parts.subList(i, parts.size()).join('/'))
         }
-        ''
+        new Ref('')
     }
 
-    String getBase() {
+    Ref getBase() {
         String path = uri.toString()
         List<String> parts = path.split('/') as List<String>
         for (int i=0; i<parts.size(); i++) {
             if (resourceNames.contains(parts[i]))
-                return parts.subList(0, i).join('/')
+                return new Ref(parts.subList(0, i).join('/'))
         }
-        uri.toString()
+        new Ref(uri.toString())
     }
 
     Ref withNewId(String newId) {
+        assert newId
         new Ref("${base}/${resourceType}/${newId}")
     }
 
     Ref rebase(String newBase) {
+        assert newBase
         String theBase = new Ref(newBase).getBase()
         new Ref("${theBase}/${relative}")
+    }
+
+    // TODO needs test
+    Ref rebase(Ref newBase) {
+        assert newBase
+        new Ref("${newBase.base}/${relative}")
     }
 
     Ref getFull() {  // without version
@@ -82,6 +109,7 @@ class Ref {
         base && resourceType && id
     }
 
+    // TODO needs test - especially creating relative Ref
     boolean isRelative() {
         !base
     }

@@ -13,7 +13,7 @@ import org.hl7.fhir.instance.model.api.IBaseResource
 @TypeChecked
 class ResourceCacheMgr {
     private static final Logger logger = Logger.getLogger(ResourceCacheMgr.class)
-    Map<URI, ResourceCache> caches = [:]  // baseUrl -> cache
+    Map<Ref, ResourceCache> caches = [:]  // baseUrl -> cache
     File externalCache
 
     ResourceCacheMgr(File externalCache) {
@@ -27,21 +27,21 @@ class ResourceCacheMgr {
             if (cache.isDirectory() && new File(cache, 'cache.properties').exists()) {
                 logger.info("Scanning Resource Cache directory ${cache}")
                 FileSystemResourceCache rcache = new FileSystemResourceCache(cache)
-                caches[rcache.baseUrl] = rcache
+                caches[rcache.base] = rcache
             }
         }
     }
 
-    void addMemoryCacheElement(URI uri, IBaseResource resource) {
-        assert ResourceMgr.isAbsolute(uri)
-        URI fhirbase = ResourceMgr.baseUrlFromUrl(uri)
+    void addMemoryCacheElement(Ref uri, IBaseResource resource) {
+        assert uri.isAbsolute()
+        Ref fhirbase = uri.base
         ResourceCache cache = caches[fhirbase]
         if (!cache) {
             cache = new MemoryResourceCache()
             caches[fhirbase] = cache
         }
         assert cache instanceof MemoryResourceCache
-        cache.add(ResourceMgr.relativeUrl(uri), resource)
+        cache.add(uri.relative, resource)
     }
 
 
@@ -50,12 +50,12 @@ class ResourceCacheMgr {
      * @param fullUrl
      * @return
      */
-     IBaseResource getResource(URI fullUrl) {
-        assert ResourceMgr.isAbsolute(fullUrl)
-        URI baseUrl = ResourceMgr.baseUrlFromUrl(fullUrl)
+     IBaseResource getResource(Ref fullUrl) {
+        assert fullUrl.isAbsolute()
+        Ref baseUrl = fullUrl.base
         ResourceCache cache = caches[baseUrl]
         if (!cache) throw new Exception("Cannot access ${fullUrl}\nNo cache defined for baseUrl ${baseUrl}\nCaches exist for ${caches.keySet()}")
-        return cache.readResource(ResourceMgr.relativeUrl(fullUrl))
+        return cache.readResource(fullUrl.relative)
     }
 
 }

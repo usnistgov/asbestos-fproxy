@@ -5,7 +5,7 @@ class LegalId {
     static legalChars = ('a'..'z') + ('A'..'Z') + '-' + '.'
 
     static boolean isLegal(String id) {
-        boolean legal = true
+        boolean legal = id.size() <= 64
 
         id.toCharArray().each {
             if (!legalChars.contains(it))

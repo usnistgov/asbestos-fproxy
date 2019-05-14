@@ -26,7 +26,7 @@ class FileSystemResourceCache implements ResourceCache {
         logger.info("New Resource cache: ${base}  --> ${cacheDir}")
     }
 
-    IBaseResource readResource(URI url) {
+    IBaseResource readResource(Ref url) {
         File file = cacheFile(url, 'xml')
         if (file.exists())
             return ctx.newXmlParser().parseResource(file.text)
@@ -36,10 +36,16 @@ class FileSystemResourceCache implements ResourceCache {
         return null
     }
 
-    private File cacheFile(URI relativeUrl, fileType) {
-        assert ResourceMgr.isRelative(relativeUrl)
-        def type = ResourceMgr.resourceTypeFromUrl(relativeUrl)
-        def id = UriBuilder.getId(relativeUrl) + ((fileType) ? ".${fileType}" : '')
+    // TODO implement
+    @Override
+    void add(Ref ref, IBaseResource resource) {
+
+    }
+
+    private File cacheFile(Ref relativeUrl, fileType) {
+        assert relativeUrl.isRelative()
+        String type = relativeUrl.resourceType
+        String id = relativeUrl.id + ((fileType) ? ".${fileType}" : '')
         return new File(new File(cacheDir, type), id)
     }
 }

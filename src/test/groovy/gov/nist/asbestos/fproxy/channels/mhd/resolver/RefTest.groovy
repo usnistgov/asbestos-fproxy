@@ -13,17 +13,17 @@ class RefTest extends Specification {
         result = new Ref('http://localhost:8999/fhir/x/Patient/2')
 
         then:
-        result.base == theBase.toString()
+        result.base == theBase
 
         when:
         Ref ref = new Ref('http://localhost:8999/fhir/x/Patient/_history/1')
 
         then:
-        theBase.toString() == ref.base
+        theBase == ref.base
 
         when:
-        String aBase = new Ref('http://myPatientServer:8999/fhir/x/Patient/_history/1').base
-        String anotherBase = new Ref('http://myPatientServer:8999/fhir/x').base
+        Ref aBase = new Ref('http://myPatientServer:8999/fhir/x/Patient/_history/1').base
+        Ref anotherBase = new Ref('http://myPatientServer:8999/fhir/x').base
 
         then:
         aBase == anotherBase
@@ -89,31 +89,31 @@ class RefTest extends Specification {
 
     def 'getRelative' () {
         setup:
-        String relative
+        Ref relative
 
         when:
         relative = new Ref('http://localhost:8080/fhir/x/Patient').relative
 
         then:
-        relative == 'Patient'
+        relative == new Ref('Patient')
 
         when:
         relative = new Ref('http://localhost:8080/fhir/x/Patient/1').relative
 
         then:
-        relative == 'Patient/1'
+        relative == new Ref('Patient/1')
 
         when:
         relative = new Ref('http://localhost:8080/fhir/x/Patient/1/_history/1').relative
 
         then:
-        relative == 'Patient/1/_history/1'
+        relative == new Ref('Patient/1/_history/1')
 
         when:
         relative = new Ref('http://localhost:8080/fhir/x').relative
 
         then:
-        relative == ''
+        relative == new Ref('')
     }
 
     def 'withNewId' () {
@@ -181,5 +181,13 @@ class RefTest extends Specification {
         then:
         ref.full == new Ref('http://localhost:8080/fhir/x/Patient')
         !ref.absolute
+    }
+
+    def 'contained' () {
+        when:
+        Ref ref = new Ref('#h')
+
+        then:
+        ref.id == 'h'
     }
 }
