@@ -1,5 +1,8 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
+import groovy.transform.TypeChecked
+
+@TypeChecked
 class Ref {
     URI uri
 
@@ -75,8 +78,12 @@ class Ref {
         parts[1]
     }
 
-    boolean isComplete() {
+    boolean isAbsolute() {
         base && resourceType && id
+    }
+
+    boolean isRelative() {
+        !base
     }
 
     String toString() {

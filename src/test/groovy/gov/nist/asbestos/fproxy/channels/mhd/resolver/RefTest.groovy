@@ -133,7 +133,7 @@ class RefTest extends Specification {
         newRef = ref.withNewId('2')
 
         then:
-        !newRef.complete
+        !newRef.absolute
     }
 
     def 'rebase' () {
@@ -166,20 +166,20 @@ class RefTest extends Specification {
 
         then:
         ref.full == new Ref('http://localhost:8080/fhir/x/Patient/1')
-        ref.complete
+        ref.absolute
 
         when:
         ref = new Ref('http://localhost:8080/fhir/x')
 
         then:
         ref.full == new Ref('http://localhost:8080/fhir/x')
-        !ref.complete
+        !ref.absolute
 
         when:
         ref = new Ref('http://localhost:8080/fhir/x/Patient')
 
         then:
         ref.full == new Ref('http://localhost:8080/fhir/x/Patient')
-        !ref.complete
+        !ref.absolute
     }
 }

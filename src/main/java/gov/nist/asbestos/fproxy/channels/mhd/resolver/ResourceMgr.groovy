@@ -29,7 +29,12 @@ class ResourceMgr {
     int newIdCounter = 1
 
     // for current resource
-    Map<URI, IBaseResource> containedResources = [:]
+    // String is the fragment without the leading #
+    // https://www.hl7.org/fhir/references.html#contained
+    // lists the rules for contained resources
+    // also relevant is
+    // https://www.hl7.org/fhir/resource.html#id
+    Map<String, IBaseResource> containedResources = [:]
     URI fullUrl
 
     // resource cache mgr
