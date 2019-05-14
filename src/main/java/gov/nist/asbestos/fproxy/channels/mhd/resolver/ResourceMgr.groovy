@@ -138,7 +138,7 @@ class ResourceMgr {
 
     def addContainedResource(IBaseResource resource) {
         assert resource instanceof DomainResource
-        def id = UriBuilder.build(resource.id)
+        String id = resource.id
         boolean duplicate = containedResources.containsKey(id)
         containedResources[id] = resource
         return duplicate

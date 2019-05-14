@@ -13,7 +13,7 @@ class FileSystemResourceCache implements ResourceCache {
     static FhirContext ctx = FhirContext.forDstu3()
 
     private File cacheDir
-    URI baseUrl
+    Ref base
 
     FileSystemResourceCache(File cacheDir) {
         this.cacheDir = cacheDir
@@ -21,8 +21,8 @@ class FileSystemResourceCache implements ResourceCache {
         assert propFile.exists() : "${cacheDir}/cache.properties does not exist"
         Properties props = new Properties()
         propFile.withInputStream { InputStream is -> props.load(is) }
-        String base = props.getProperty('baseUrl')
-        baseUrl = UriBuilder.build(base)
+        String aBase = props.getProperty('baseUrl')
+        base = new Ref(aBase)
         logger.info("New Resource cache: ${base}  --> ${cacheDir}")
     }
 
