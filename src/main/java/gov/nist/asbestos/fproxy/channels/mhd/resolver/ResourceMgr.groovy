@@ -16,12 +16,11 @@ import org.hl7.fhir.instance.model.api.IBaseResource
  */
 @TypeChecked
 class ResourceMgr {
-    static private final Logger logger1 = Logger.getLogger(ResourceMgr.class);
-    Bundle bundle = null
-    // Object is some Resource type
+    static private final Logger logger = Logger.getLogger(ResourceMgr.class);
     Map<Ref, ResourceWrapper> resources = [:]   // url -> resource
     int newIdCounter = 1
 
+    // TODO this should go inside ResourceWrapper
     // for current resource
     // String is the fragment without the leading #
     // https://www.hl7.org/fhir/references.html#contained
@@ -37,10 +36,9 @@ class ResourceMgr {
     Val val
 
     ResourceMgr(Bundle bundle, Val val) {
-        this.bundle = bundle
         this.val = val
         if (bundle)
-            parseBundle()
+            parse(bundle)
     }
 
     ResourceMgr(Map<Ref, Resource> resourceMap, Val validationReport) {
@@ -61,7 +59,7 @@ class ResourceMgr {
         }
     }
 
-    void parseBundle() {
+    void parse(Bundle bundle) {
         Val thisVal = val.addSection("Load Bundle...")
         bundle.getEntry().each { Bundle.BundleEntryComponent component ->
             if (component.hasResource()) {
