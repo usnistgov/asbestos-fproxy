@@ -2,9 +2,10 @@ package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
 import gov.nist.asbestos.fproxy.Base.Base
 import gov.nist.asbestos.fproxy.Base.LoadedResource
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 import gov.nist.asbestos.simapi.tk.util.UuidAllocator
 import gov.nist.asbestos.simapi.validation.Val
-import gov.nist.asbestos.simapi.validation.ValidationReport
+
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 import org.hl7.fhir.dstu3.model.*
@@ -18,7 +19,7 @@ class ResourceMgr {
     static private final Logger logger1 = Logger.getLogger(ResourceMgr.class);
     Bundle bundle = null
     // Object is some Resource type
-    Map<Ref, IBaseResource> resources = [:]   // url -> resource
+    Map<Ref, ResourceWrapper> resources = [:]   // url -> resource
     int newIdCounter = 1
 
     // for current resource
@@ -33,26 +34,24 @@ class ResourceMgr {
     // resource cache mgr
     ResourceCacheMgr resourceCacheMgr = null
 
-    ValidationReport validationReport
-    Val topVal
+    Val val
 
-    ResourceMgr(Bundle bundle, ValidationReport validationReport) {
+    ResourceMgr(Bundle bundle, Val val) {
         this.bundle = bundle
-        this.validationReport = validationReport
-        topVal = new Val()
-        validationReport.add(topVal)
+        this.val = val
         if (bundle)
             parseBundle()
     }
 
-    ResourceMgr(Map<Ref, Resource> resourceMap, ValidationReport validationReport) {
-        this.validationReport = validationReport
+    ResourceMgr(Map<Ref, Resource> resourceMap, Val validationReport) {
+        this.val = validationReport
         validationReport.add(topVal)
         parseResourceMap(resourceMap)
     }
 
-    def addResourceCacheMgr(ResourceCacheMgr resourceCacheMgr) {
+    ResourceMgr addResourceCacheMgr(ResourceCacheMgr resourceCacheMgr) {
         this.resourceCacheMgr = resourceCacheMgr
+        this
     }
 
     def parseResourceMap(Map<Ref, Resource> resourceMap) {
@@ -62,18 +61,18 @@ class ResourceMgr {
         }
     }
 
-    def parseBundle() {
-        Val thisVal = topVal.addSection("Load Bundle...")
+    void parseBundle() {
+        Val thisVal = val.addSection("Load Bundle...")
         bundle.getEntry().each { Bundle.BundleEntryComponent component ->
             if (component.hasResource()) {
-                assignId(component.getResource())
+                ResourceWrapper wrapper = new ResourceWrapper(component.resource)
+                        .setId(allocationSymbolicId())
+                        .setFullUrl(component.fullUrl)
+
                 thisVal.add("...${component.fullUrl}")
-                def duplicate = addResource(new Ref(component.fullUrl), component.getResource())
-                assert !duplicate, "Duplicate entry in bundle - URL is ${component.fullUrl}"
+                addResource(new Ref(component.fullUrl), wrapper)
             }
         }
-            Val r = thisVal.addSection('Load Resources')
-            r.msg(toString())
     }
 
     def currentResource(Resource resource) {
@@ -81,7 +80,7 @@ class ResourceMgr {
         assert resource instanceof DomainResource
         def contained = resource.contained
         contained?.each { Resource r ->
-            def duplicate = addContainedResource(r)
+            boolean duplicate = addContainedResource(r)
             assert !duplicate, "Duplicate contained Resource (${r.id} in Resource ${resource.id})"
         }
 
@@ -128,13 +127,16 @@ class ResourceMgr {
      * @param resource
      * @return already present
      */
-    boolean addResource(Ref url, IBaseResource resource) {
+    void addResource(Ref url, ResourceWrapper wrapper) {
         boolean duplicate = resources.containsKey(url)
-        resources[url] = resource
-        return duplicate
+        if (duplicate)
+            val.err(new Val()
+                    .msg("Duplicate resource found in bundle for URL ${url}"))
+        else
+            resources[url] = wrapper
     }
 
-    def addContainedResource(IBaseResource resource) {
+    boolean addContainedResource(IBaseResource resource) {
         assert resource instanceof DomainResource
         String id = resource.id
         boolean duplicate = containedResources.containsKey(id)
@@ -205,7 +207,7 @@ class ResourceMgr {
                 thisVal.msg("Resolver: ...in bundle")
                 return new LoadedResource(referenceUrl, resources[referenceUrl])
             }
-            def isRelativeReference = referenceUrl.isRelative()
+            def isRelativeReference = !referenceUrl.isAbsolute()
             if (config.relativeReferenceRequired && !isRelativeReference) {
                 thisVal.msg("Resolver: ...relative reference required - not relative")
                 return new LoadedResource(null, null)
@@ -215,7 +217,7 @@ class ResourceMgr {
             // Resource.fullUrl (containingUrl) is a uuid (not a real reference) then it is not absolute
             // if it is not absolute then this refernceUrl cannot be relative (relative to what???).
             // this is a correct validation but needs a lot more on the error message (now a Groovy assert)
-            if (!containingUrl.isAbsolute() && referenceUrl.isRelative()) {
+            if (!containingUrl.isAbsolute() && !referenceUrl.isAbsolute()) {
                 def x = resources.find {
                     def key = it.key
                     // for Patient, it must be absolute reference
@@ -228,7 +230,7 @@ class ResourceMgr {
                     return new LoadedResource(x.key, x.value)
                 }
             }
-            if (containingUrl.isAbsolute() && referenceUrl.isRelative()) {
+            if (containingUrl.isAbsolute() && !referenceUrl.isAbsolute()) {
                 Ref url = containingUrl.rebase(referenceUrl)
                 if (resources[url]) {
                     thisVal.msg("Resolver: ...found in bundle")
@@ -270,6 +272,10 @@ class ResourceMgr {
 
         thisVal.err("Resolver: ...failed")
         new LoadedResource(null, null)
+    }
+    int symbolicIdCounter = 1
+    String allocationSymbolicId() {
+        "ID${symbolicIdCounter++}"
     }
 
 }

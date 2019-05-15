@@ -43,7 +43,7 @@ class FileSystemResourceCache implements ResourceCache {
     }
 
     private File cacheFile(Ref relativeUrl, fileType) {
-        assert relativeUrl.isRelative()
+        assert !relativeUrl.isAbsolute()
         String type = relativeUrl.resourceType
         String id = relativeUrl.id + ((fileType) ? ".${fileType}" : '')
         return new File(new File(cacheDir, type), id)

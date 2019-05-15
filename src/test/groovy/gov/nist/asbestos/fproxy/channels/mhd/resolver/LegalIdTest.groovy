@@ -4,9 +4,15 @@ import spock.lang.Specification
 
 class LegalIdTest extends Specification {
 
-    def 'numeric' () {
+    def 'test' () {
         when:
         String id = '4'
+
+        then:
+        LegalId.isLegal(id)
+
+        when:
+        id = 'id3-4A.'
 
         then:
         LegalId.isLegal(id)

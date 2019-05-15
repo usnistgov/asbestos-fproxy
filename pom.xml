@@ -23,6 +23,18 @@
   </properties>
 
   <dependencies>
+
+    <!-- Bring in some toolkit code for test only -->
+
+    <dependency>
+      <groupId>gov.nist.toolkit</groupId>
+      <artifactId>validators-registry-metadata</artifactId>
+      <version>7.2.8</version>
+      <scope>test</scope>
+    </dependency>
+
+
+
     <dependency>
       <groupId>org.spockframework</groupId>
       <artifactId>spock-core</artifactId>

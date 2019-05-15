@@ -4,7 +4,7 @@ import spock.lang.Specification
 
 class RefTest extends Specification {
 
-    def 'getBase' () {
+    def 'getBase'() {
         setup:
         Ref result
         Ref theBase = new Ref('http://localhost:8999/fhir/x')
@@ -29,7 +29,7 @@ class RefTest extends Specification {
         aBase == anotherBase
     }
 
-    def 'getId' () {
+    def 'getId'() {
         setup:
         String id
 
@@ -58,7 +58,7 @@ class RefTest extends Specification {
         id == null
     }
 
-    def 'getResourceType' () {
+    def 'getResourceType'() {
         setup:
         String type
 
@@ -87,7 +87,7 @@ class RefTest extends Specification {
         type == null
     }
 
-    def 'getRelative' () {
+    def 'getRelative'() {
         setup:
         Ref relative
 
@@ -116,7 +116,7 @@ class RefTest extends Specification {
         relative == new Ref('')
     }
 
-    def 'withNewId' () {
+    def 'withNewId'() {
         setup:
         Ref ref
         Ref newRef
@@ -136,7 +136,7 @@ class RefTest extends Specification {
         !newRef.absolute
     }
 
-    def 'rebase' () {
+    def 'rebase'() {
         when:
         Ref orig = new Ref('http://localhost:8080/fhir/x/Patient/1')
         String newBase = 'https://example.com:9090/fhir'
@@ -146,7 +146,7 @@ class RefTest extends Specification {
         rebased.toString() == 'https://example.com:9090/fhir/Patient/1'
     }
 
-    def 'version' () {
+    def 'version'() {
         when:
         Ref good = new Ref('http://localhost:8080/fhir/x/Patient/1/_history/9')
 
@@ -160,7 +160,7 @@ class RefTest extends Specification {
         bad.version == null
     }
 
-    def 'full' () {
+    def 'full'() {
         when:
         Ref ref = new Ref('http://localhost:8080/fhir/x/Patient/1/_history/9')
 
@@ -175,19 +175,49 @@ class RefTest extends Specification {
         ref.full == new Ref('http://localhost:8080/fhir/x')
         !ref.absolute
 
+    }
+
+    def 'full full' () {
         when:
-        ref = new Ref('http://localhost:8080/fhir/x/Patient')
+        Ref ref = new Ref('http://localhost:8080/fhir/x/Patient')
 
         then:
         ref.full == new Ref('http://localhost:8080/fhir/x/Patient')
         !ref.absolute
+
     }
 
-    def 'contained' () {
+    def 'just id'() {
         when:
         Ref ref = new Ref('#h')
 
         then:
         ref.id == 'h'
+        ref.isContained()
+
+        when:
+        ref = new Ref('d')
+
+        then:
+        ref.id == 'd'
+
+        when:
+        ref = new Ref('Patient/1')
+
+        then:
+        ref.resourceType == 'Patient'
+        ref.id == '1'
+        ref.relative as String == 'Patient/1'
+        ref.base as String == ''
+        ref.full as String == 'Patient/1'
+        ref.version == null
+    }
+
+    def 'full id'() {
+        when:
+        Ref ref = new Ref('Patient/1')
+
+        then:
+        ref.full as String == 'Patient/1'
     }
 }

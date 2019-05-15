@@ -30,11 +30,12 @@ class Ref {
     // TODO implement
     IBaseResource load() {
         if (!isLoadable()) return null
-        null
+        assert false
     }
 
     String getId() {
         String path = uri.path
+        if (!path.contains('/')) return path
         String[] parts = path.split('/')
         for (int i=0; i<parts.size()-1; i++) {
             if (resourceNames.contains(parts[i]))
@@ -91,11 +92,19 @@ class Ref {
     }
 
     Ref getFull() {  // without version
-        if (resourceType && id)
+        String baseStr = base as String
+        String resourceTypeStr = resourceType as String
+        String idStr = id as String
+        boolean hasScheme = uri.scheme
+        if (!hasScheme && baseStr && resourceTypeStr && idStr)
             return new Ref("${base}/${resourceType}/${id}")
-        if (resourceType && !id)
-            return new Ref("${base}/${resourceType}")
-        return new Ref("${base}")
+        if (!hasScheme && resourceTypeStr && !idStr)
+            return new Ref("${resourceType}")
+        if (!hasScheme && resourceTypeStr && idStr)
+            return new Ref("${resourceType}/${id}")
+        if (uri.toString().contains('_history'))
+            return new Ref(uri.toString().split('/_history', 2)[0])
+        return new Ref(uri)
     }
 
     String getVersion() {
@@ -106,12 +115,7 @@ class Ref {
     }
 
     boolean isAbsolute() {
-        base && resourceType && id
-    }
-
-    // TODO needs test - especially creating relative Ref
-    boolean isRelative() {
-        !base
+        uri.scheme && base && resourceType && id
     }
 
     String toString() {
@@ -133,25 +137,32 @@ class Ref {
         return (uri != null ? uri.hashCode() : 0)
     }
 
-    static private URI build(String ref) {
-        try {
-            if (ref.startsWith('#'))
-                return new URI(null, '', ref)
-            String[] parts = ref.split(':', 2)
-            if (parts.size() == 1)
-                return new URI(null, parts[0], null)
-            String[] partx = parts[1].split('#')
-            String scheme = parts[0]
-            String ssp = partx[0]
-            String[] party = ssp.split('#', 2)
-            ssp = party[0]
-            String fragment = null
-            if (party.size() == 2)
-                fragment = party[1]
-            new URI(parts[0], parts[1], fragment)
-        } catch (ArrayIndexOutOfBoundsException e) {
-            throw e
+    boolean contained = false
+
+    private URI build(String ref) {
+        if (ref.startsWith('#')) {
+            contained = true
+            ref = ref.substring(1)
         }
+        new URI(ref)
+//        try {
+//            if (ref.startsWith('#'))
+//                return new URI(null, '', ref)
+//            String[] parts = ref.split(':', 2)
+//            if (parts.size() == 1)
+//                return new URI(null, parts[0], null)
+//            String[] partx = parts[1].split('#')
+//            String scheme = parts[0]
+//            String ssp = partx[0]
+//            String[] party = ssp.split('#', 2)
+//            ssp = party[0]
+//            String fragment = null
+//            if (party.size() == 2)
+//                fragment = party[1]
+//            new URI(parts[0], parts[1], fragment)
+//        } catch (ArrayIndexOutOfBoundsException e) {
+//            throw e
+//        }
     }
 
     static private List<String> resourceNames = [
