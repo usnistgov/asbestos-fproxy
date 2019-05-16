@@ -61,7 +61,7 @@ class ResourceMgr {
         bundle.getEntry().each { Bundle.BundleEntryComponent component ->
             if (component.hasResource()) {
                 IBaseResource resource = component.resource
-                String id = allocationSymbolicId()
+                String id = allocateSymbolicId()
                 thisVal.msg("Assigning ${id} to ${component.resource.class.simpleName}/${component.resource.idElement.value}")
                 ResourceWrapper wrapper = new ResourceWrapper(component.resource)
                         .setId(id)
@@ -252,7 +252,7 @@ class ResourceMgr {
         new LoadedResource(null, null)
     }
     int symbolicIdCounter = 1
-    String allocationSymbolicId() {
+    String allocateSymbolicId() {
         "ID${symbolicIdCounter++}"
     }
 
