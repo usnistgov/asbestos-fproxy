@@ -22,12 +22,6 @@ class ResourceMgr {
 
     // TODO this should go inside ResourceWrapper
     // for current resource
-    // String is the fragment without the leading #
-    // https://www.hl7.org/fhir/references.html#contained
-    // lists the rules for contained resources
-    // also relevant is
-    // https://www.hl7.org/fhir/resource.html#id
-    Map<String, IBaseResource> containedResources = [:]
     Ref fullUrl
 
     // resource cache mgr
@@ -41,10 +35,9 @@ class ResourceMgr {
             parse(bundle)
     }
 
-    ResourceMgr(Map<Ref, Resource> resourceMap, Val validationReport) {
-        this.val = validationReport
-        validationReport.add(topVal)
-        parseResourceMap(resourceMap)
+    ResourceMgr(Map<Ref, Resource> resourceMap, Val val) {
+        this.val = val
+        parse(resourceMap)
     }
 
     ResourceMgr addResourceCacheMgr(ResourceCacheMgr resourceCacheMgr) {
@@ -52,19 +45,26 @@ class ResourceMgr {
         this
     }
 
-    def parseResourceMap(Map<Ref, Resource> resourceMap) {
+    def parse(Map<Ref, Resource> resourceMap) {
         resourceMap.each { Ref fullUrl, Resource res ->
             assignId(res)
-            addResource(fullUrl, res)
+            addResource(fullUrl, new ResourceWrapper(res))
         }
     }
 
+    // Load bundle and assign symbolic ids
     void parse(Bundle bundle) {
         Val thisVal = val.addSection("Load Bundle...")
+        thisVal.add(new Val()
+                .msg('All objects assigned symbolic IDs')
+                .frameworkDoc('3.65.4.1.2 Message Semantics'))
         bundle.getEntry().each { Bundle.BundleEntryComponent component ->
             if (component.hasResource()) {
+                IBaseResource resource = component.resource
+                String id = allocationSymbolicId()
+                thisVal.msg("Assigning ${id} to ${component.resource.class.simpleName}/${component.resource.idElement.value}")
                 ResourceWrapper wrapper = new ResourceWrapper(component.resource)
-                        .setId(allocationSymbolicId())
+                        .setId(id)
                         .setFullUrl(component.fullUrl)
 
                 thisVal.add("...${component.fullUrl}")
@@ -72,20 +72,6 @@ class ResourceMgr {
             }
         }
     }
-
-    def currentResource(Resource resource) {
-        clearContainedResources()
-        assert resource instanceof DomainResource
-        def contained = resource.contained
-        contained?.each { Resource r ->
-            boolean duplicate = addContainedResource(r)
-            assert !duplicate, "Duplicate contained Resource (${r.id} in Resource ${resource.id})"
-        }
-
-        fullUrl = url(resource)
-    }
-
-
 
     String assignId(Resource resource) {
         if (!resource.id || Base.isUUID(resource.id)) {
@@ -134,13 +120,7 @@ class ResourceMgr {
             resources[url] = wrapper
     }
 
-    boolean addContainedResource(IBaseResource resource) {
-        assert resource instanceof DomainResource
-        String id = resource.id
-        boolean duplicate = containedResources.containsKey(id)
-        containedResources[id] = resource
-        return duplicate
-    }
+
 
     def clearContainedResources() {
         containedResources = [:]

@@ -1,15 +1,15 @@
 package gov.nist.asbestos.fproxy.Base
 
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.Ref
-import org.hl7.fhir.instance.model.api.IBaseResource
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 
 class LoadedResource {
 
-    Ref uri
-    IBaseResource resource
+    Ref ref
+    ResourceWrapper resource
 
-    LoadedResource(Ref uri, IBaseResource resource) {
-        this.uri = uri
+    LoadedResource(Ref ref, ResourceWrapper resource) {
+        this.ref = ref
         this.resource = resource
     }
 }
