@@ -1,5 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 import groovy.transform.TypeChecked
 import org.apache.log4j.Logger
 import org.hl7.fhir.instance.model.api.IBaseResource
@@ -8,7 +9,7 @@ import org.hl7.fhir.instance.model.api.IBaseResource
  * build by a factory - either TestResourceCacheFactory or ResourceCacheMgrFactory
  *
  * Manages multiple resource caches.  Each cache is identified by its BaseUrl
- * For now all caches are static - content loaded from maven build or from a test case
+ *
  */
 @TypeChecked
 class ResourceCacheMgr {
@@ -50,7 +51,7 @@ class ResourceCacheMgr {
      * @param fullUrl
      * @return
      */
-     IBaseResource getResource(Ref fullUrl) {
+     ResourceWrapper getResource(Ref fullUrl) {
         assert fullUrl.isAbsolute()
         Ref baseUrl = fullUrl.base
         ResourceCache cache = caches[baseUrl]

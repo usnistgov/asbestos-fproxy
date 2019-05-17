@@ -2,10 +2,11 @@ package gov.nist.asbestos.fproxy.channels.mhd.transactionSupport
 
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.Ref
 import gov.nist.asbestos.simapi.validation.Val
+import groovy.transform.TypeChecked
 import org.hl7.fhir.dstu3.model.BaseResource
-import org.hl7.fhir.dstu3.model.DomainResource
 import org.hl7.fhir.dstu3.model.Resource
 
+@TypeChecked
 class ResourceWrapper {
     Resource resource
     String assignedId
@@ -15,19 +16,11 @@ class ResourceWrapper {
     // lists the rules for contained resources
     // also relevant is
     // https://www.hl7.org/fhir/resource.html#id
-    Map<String, BaseResource> contained = [:]
+    Map<Ref, ResourceWrapper> contained = [:]
 
 
-    ResourceWrapper(DomainResource resource, Val val) {
+    ResourceWrapper(Resource resource) {
         this.resource = resource
-
-        List<Resource> contained = resource.contained
-        contained?.each { Resource r ->
-            boolean duplicate = addContainedResource(r)
-            if (duplicate)
-                val.err(new Val()
-                        .msg("Duplicate contained Resource (${r.id} in Resource ${resource.class.simpleName}/${resource.id})"))
-        }
     }
 
     ResourceWrapper setId(String id) {
@@ -40,10 +33,18 @@ class ResourceWrapper {
         this
     }
 
-    private boolean addContainedResource(Resource resource) {
-        String id = resource.id
+    String getId() {
+        if (fullUrl.id) return fullUrl.id
+        if (assignedId) return assignedId
+        assert false : "Cannot retreive id for ${resource}"
+    }
+
+    private boolean addContainedResource(ResourceWrapper resource, Val val) {
+        Ref id = new Ref(resource.resource.id)
         boolean duplicate = contained.containsKey(id)
         if (!duplicate) contained[id] = resource
+        if (duplicate)
+            val.err(new Val().msg("Contained resource ${id} is a duplicate within ${resource.resource.id}"))
         return duplicate
     }
 }

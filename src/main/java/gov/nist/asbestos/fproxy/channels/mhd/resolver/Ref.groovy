@@ -1,5 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 import groovy.transform.TypeChecked
 import org.hl7.fhir.instance.model.api.IBaseResource
 
@@ -22,13 +23,17 @@ class Ref {
         this.uri = ref.uri
     }
 
+    Ref(org.hl7.fhir.dstu3.model.Reference reference) {
+        this(reference.reference)
+    }
+
     // TODO implement
     boolean isLoadable() {
         false
     }
 
     // TODO implement
-    IBaseResource load() {
+    ResourceWrapper load() {
         if (!isLoadable()) return null
         assert false
     }

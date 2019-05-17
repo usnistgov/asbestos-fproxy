@@ -5,29 +5,11 @@ import gov.nist.asbestos.fproxy.channels.mhd.resolver.Ref
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResolverConfig
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResourceCacheMgr
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResourceMgr
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.AssigningAuthorities
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.Attachment
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.Code
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.CodeTranslator
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.Configuration
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.MhdIdentifier
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
-import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.Submission
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.*
 import gov.nist.asbestos.simapi.validation.Val
 import groovy.transform.TypeChecked
 import groovy.xml.MarkupBuilder
-import org.apache.log4j.Logger
-import org.hl7.fhir.dstu3.model.Base64BinaryType
-import org.hl7.fhir.dstu3.model.Binary
-import org.hl7.fhir.dstu3.model.Bundle
-import org.hl7.fhir.dstu3.model.CodeableConcept
-import org.hl7.fhir.dstu3.model.Coding
-import org.hl7.fhir.dstu3.model.DocumentManifest
-import org.hl7.fhir.dstu3.model.DocumentReference
-import org.hl7.fhir.dstu3.model.Identifier
-import org.hl7.fhir.dstu3.model.ListResource
-import org.hl7.fhir.dstu3.model.Patient
-import org.hl7.fhir.dstu3.model.Reference
+import org.hl7.fhir.dstu3.model.*
 import org.hl7.fhir.instance.model.api.IBaseResource
 
 import javax.xml.bind.DatatypeConverter
@@ -118,10 +100,9 @@ class BundleToRegistryObjectList {
                     addSubmissionSet(xml, resource)
                     addSubmissionSetAssociations(xml, resource)
                 }
-                else if (resource instanceof DocumentReference) {
-                    rMgr.assignId(resource)
-                    DocumentReference dr = (DocumentReference) resource
-                    LoadedResource loadedResource = rMgr.resolveReference(url, new Ref(dr.content[0].attachment.url), new ResolverConfig().internalRequired())
+                else if (resource.resource instanceof DocumentReference) {
+                    DocumentReference dr = (DocumentReference) resource.resource
+                    LoadedResource loadedResource = rMgr.resolveReference(resource, new Ref(dr.content[0].attachment.url), new ResolverConfig().internalRequired())
                     if (!(loadedResource.resource.resource instanceof Binary))
                         val.err(new Val()
                         .msg("Binary ${dr.content[0].attachment.url} is not available in Bundle."))
@@ -141,11 +122,7 @@ class BundleToRegistryObjectList {
                     addExtrinsicObject(xml, resource)
 //                    documents[dr.getId()] = a.contentId
                     documents[resource.assignedId] = a.contentId
-                    addRelationshipAssociations(xml, rMgr.url(dr), dr)
-                } else {
-                    if (proxyBase)
-                        proxyBase.resourcesSubmitted << resource
-
+                    addRelationshipAssociations(xml, resource)
                 }
             }
         }
@@ -158,16 +135,17 @@ class BundleToRegistryObjectList {
         if (!dm.content) return
         dm.content.each { DocumentManifest.DocumentManifestContentComponent component ->
             Reference ref = component.PReference
-            LoadedResource loadedResource = rMgr.resolveReference(null, new Ref(ref.reference), new ResolverConfig().internalRequired())
+            LoadedResource loadedResource = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().internalRequired())
 
             if (!loadedResource.resource)
                 val.err(new Val()
                 .msg("DocumentManifest references ${ref.resource} - ${loadedResource.ref} is not included in the bundle"))
-            addAssociation(xml, 'urn:oasis:names:tc:ebxml-regrep:AssociationType:HasMember', resource.assignedId, loadedResource.resource.assignedId, 'SubmissionSetStatus', ['Original'])
+            addAssociation(xml, 'urn:oasis:names:tc:ebxml-regrep:AssociationType:HasMember', resource, loadedResource.ref, 'SubmissionSetStatus', ['Original'])
         }
     }
 
     def addRelationshipAssociations(MarkupBuilder xml, ResourceWrapper resource) {
+        assert resource.resource instanceof DocumentReference
         DocumentReference dr = (DocumentReference) resource.resource
         if (!dr.relatesTo || dr.relatesTo.size() == 0) return
 
@@ -181,29 +159,25 @@ class BundleToRegistryObjectList {
 
             Reference ref = comp.target
 
-            LoadedResource referencedDocRef = rMgr.resolveReference(resource.fullUrl, new Ref(ref.reference), new ResolverConfig().externalRequired())
+            LoadedResource referencedDocRef = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().externalRequired())
 
             if (!referencedDocRef.resource) {
                 val.err(new Val()
                         .msg("Trying to build ${xdsType} Association - ${ref.reference} cannot be resolved"))
                 return
             }
-            boolean hasEntryUUID = checkEntryUUID(refResource)
-            assert hasEntryUUID, "Referenced ${refResource.class.simpleName} ${ref.reference} does not have an Official Identifier (entryUUID)"
-            String targetEntryUUID = getEntryUUID(refResource)
-
-            addAssociation(xml, xdsType, getEntryUUID(dr), "${targetEntryUUID}", null, null)
+            addAssociation(xml, xdsType, resource, referencedDocRef.ref, null, null)
         }
     }
 
-    private addAssociation(MarkupBuilder xml, String type, String source, String target, String slotName, List<String> slotValues) {
+    private addAssociation(MarkupBuilder xml, String type, ResourceWrapper source, Ref target, String slotName, List<String> slotValues) {
         val.add(new Val().msg("Association(${type}) source=${source} target=${target}"))
         def assoc = xml.Association(
-                sourceObject: "${source}",
-                targetObject: "${target}",
+                sourceObject: "${source.id}",
+                targetObject: "${target.id}",
                 associationType: "${type}",
                 objectType: 'urn:oasis:names:tc:ebxml-regrep:ObjectType:RegistryObject:Association',
-                id: "${rMgr.newId()}"
+                id: "${rMgr.allocateSymbolicId()}"
         ) {
             if (slotName) {
                 addSlot(xml, slotName, slotValues)
@@ -239,14 +213,14 @@ class BundleToRegistryObjectList {
 
             String masterId = (dm.masterIdentifier?.value) ? dm.masterIdentifier.value : null
             if (masterId)
-                addExternalIdentifier(builder, 'urn:uuid:96fdda7c-d067-4183-912e-bf5ee74998a8', unURN(masterId), rMgr.newId(), resource.assignedId, 'XDSSubmissionSet.uniqueId')
+                addExternalIdentifier(builder, 'urn:uuid:96fdda7c-d067-4183-912e-bf5ee74998a8', unURN(masterId), rMgr.allocateSymbolicId(), resource.assignedId, 'XDSSubmissionSet.uniqueId')
 
             if (dm.source) {
-                addExternalIdentifier(builder, 'urn:uuid:554ac39e-e3fe-47fe-b233-965d2a147832', unURN(dm.source), rMgr.newId(), resource.assignedId, 'XDSSubmissionSet.sourceId')
+                addExternalIdentifier(builder, 'urn:uuid:554ac39e-e3fe-47fe-b233-965d2a147832', unURN(dm.source), rMgr.allocateSymbolicId(), resource.assignedId, 'XDSSubmissionSet.sourceId')
             }
 
             if (dm.subject)
-                addSubject(builder, resource.fullUrl, resource.assignedId, 'urn:uuid:6b5aea1a-874d-4603-a4bc-96a0a7b38446', dm.subject, 'XDSSubmissionSet.patientId')
+                addSubject(builder, resource, new Ref(dm.subject.id), 'urn:uuid:6b5aea1a-874d-4603-a4bc-96a0a7b38446', 'XDSSubmissionSet.patientId')
 
         }
     }
@@ -310,7 +284,7 @@ class BundleToRegistryObjectList {
                     }
 
                     if (dr.context?.sourcePatientInfo)
-                        this.addSourcePatient(builder, dr.context.sourcePatientInfo)
+                        this.addSourcePatient(builder, resource, dr.context.sourcePatientInfo)
 
                     if (dr.description)
                         addName(builder, dr.description)
@@ -341,20 +315,15 @@ class BundleToRegistryObjectList {
 
                     assert dr.masterIdentifier, 'DocumentReference.masterIdentifier not present - declared by IHE to be [1..1]'
                     assert dr.masterIdentifier.value, 'DocumentReference.masterIdentifier has no value - declared by IHE to be [1..1]'
-                    String masterId
-                    if (dr.masterIdentifier?.value) {
-                        masterId = unURN(dr.masterIdentifier.value)
-//                    } else {
-//                        masterId = UniqueIdAllocator.getInstance().allocate()
-                    }
-                    addExternalIdentifier(builder, 'urn:uuid:2e82c1f6-a085-4c72-9da3-8640a32e42ab', masterId, rMgr.newId(), resource.assignedId, 'XDSDocumentEntry.uniqueId')
+                    String masterId = unURN(dr.masterIdentifier.value)
+                    addExternalIdentifier(builder, 'urn:uuid:2e82c1f6-a085-4c72-9da3-8640a32e42ab', masterId, rMgr.allocateSymbolicId(), resource.assignedId, 'XDSDocumentEntry.uniqueId')
 
                     if (dr.subject?.hasReference())
-                        addSubject(builder, resource.fullUrl, resource.assignedId, 'urn:uuid:58a6f841-87b3-4a3e-92fd-a8ffeff98427', dr.subject, 'XDSDocumentEntry.patientId')
+                        addSubject(builder, resource,  new Ref(dr.subject), 'urn:uuid:58a6f841-87b3-4a3e-92fd-a8ffeff98427', 'XDSDocumentEntry.patientId')
 
                     if (dr.author) {
                         dr.author.each { Reference ref ->
-
+                            // TODO finish
                         }
                     }
 
@@ -373,12 +342,12 @@ class BundleToRegistryObjectList {
      */
 
     // TODO sourcePatientInfo is not populated
-    def addSourcePatient(MarkupBuilder builder, Reference sourcePatient) {
+    def addSourcePatient(MarkupBuilder builder, ResourceWrapper resource, Reference sourcePatient) {
         if (!sourcePatient.reference)
             return
         val.add(new Val().msg("Resolve ${sourcePatient.reference} as SourcePatient"))
         def extra = 'DocumentReference.context.sourcePatientInfo must reference Contained Patient resource with Patient.identifier.use element set to "usual"'
-        LoadedResource loadedPatient = rMgr.resolveReference(null, new Ref(sourcePatient.reference), new ResolverConfig().containedRequired())
+        LoadedResource loadedPatient = rMgr.resolveReference(resource, new Ref(sourcePatient.reference), new ResolverConfig().containedRequired())
         if (!loadedPatient.resource) {
             val.err(new Val()
             .msg("Cannot load resource at ${loadedPatient.ref}"))
@@ -416,18 +385,18 @@ class BundleToRegistryObjectList {
 
     // TODO must be absolute reference
     // TODO official identifiers must be changed
-    private addSubject(MarkupBuilder builder, Ref fullUrl, String containingObjectId, String scheme,  org.hl7.fhir.dstu3.model.Reference subject, String attName) {
-        Ref ref1 = new Ref(subject.getReference())
-        LoadedResource loadedResource = rMgr.resolveReference(fullUrl, ref1, new ResolverConfig().externalRequired())
+    private addSubject(MarkupBuilder builder, ResourceWrapper resource, Ref referenced, String scheme, String attName) {
+
+        LoadedResource loadedResource = rMgr.resolveReference(resource, referenced, new ResolverConfig().externalRequired())
         if (!loadedResource.ref) {
             val.err(new Val()
-                    .msg("${fullUrl} makes reference to ${ref1}")
+                    .msg("${resource} makes reference to ${referenced}")
                     .msg('All DocumentReference.subject and DocumentManifest.subject values shall be References to FHIR Patient Resources identified by an absolute external reference (URL).')
                     .frameworkDoc('3.65.4.1.2.2 Patient Identity'))
         }
         if (!(loadedResource.resource instanceof Patient))
             val.err(new Val()
-                    .msg("${fullUrl} points to a ${loadedResource.resource.class.simpleName} - it must be a Patient")
+                    .msg("${resource} points to a ${loadedResource.resource.class.simpleName} - it must be a Patient")
                     .frameworkDoc('3.65.4.1.2.2 Patient Identity'))
 
         Patient patient = (Patient) loadedResource.resource.resource
@@ -436,7 +405,7 @@ class BundleToRegistryObjectList {
         def pid = findAcceptablePID(identifiers)
 
         if (pid)
-            addExternalIdentifier(builder, scheme, pid, rMgr.newId(), containingObjectId, attName)
+            addExternalIdentifier(builder, scheme, pid, rMgr.allocateSymbolicId(), resource.id, attName)
     }
 
     private addExternalIdentifier(MarkupBuilder builder, String scheme, String value, String id, String registryObject, String name) {
