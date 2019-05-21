@@ -1,6 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
-
+import gov.nist.asbestos.fproxy.Base.IVal
 import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 import gov.nist.asbestos.simapi.validation.Val
 
@@ -12,15 +12,13 @@ import org.hl7.fhir.r4.model.Bundle
  *
  */
 @TypeChecked
-class ResourceMgr {
+class ResourceMgr implements IVal {
 //    static private final Logger logger = Logger.getLogger(ResourceMgr.class);
     Map<Ref, ResourceWrapper> resources = [:]   // url -> resource
-    int newIdCounter = 1
     ResourceCacheMgr resourceCacheMgr = null
     Val val
 
-    ResourceMgr(Bundle bundle, Val val) {
-        this.val = val
+    ResourceMgr(Bundle bundle) {
         if (bundle)
             parse(bundle)
     }
@@ -32,6 +30,7 @@ class ResourceMgr {
 
     // Load bundle and assign symbolic ids
     void parse(Bundle bundle) {
+        assert val
         Val thisVal = val.addSection("Load Bundle...")
         thisVal.add(new Val()
                 .msg('All objects assigned symbolic IDs')
@@ -67,6 +66,7 @@ class ResourceMgr {
      * @return already present
      */
     void addResource(Ref url, ResourceWrapper resource) {
+        assert val
         boolean duplicate = resources.containsKey(url)
         if (duplicate)
             val.err(new Val()
@@ -83,6 +83,7 @@ class ResourceMgr {
      */
     // TODO - needs toughening - containingURL could be null if referenceURL is absolute
     ResourceWrapper resolveReference(ResourceWrapper containing, Ref referenceUrl, ResolverConfig config) {
+        assert val
         assert containing : "resolveReference: containing resource is null"
         assert referenceUrl : "Reference from ${containing} is null"
         Val thisVal = val.addSection("Resolver: Resolve URL ${referenceUrl}... ${config}")

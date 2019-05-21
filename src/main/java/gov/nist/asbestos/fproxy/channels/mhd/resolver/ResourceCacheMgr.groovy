@@ -33,7 +33,7 @@ class ResourceCacheMgr {
         }
     }
 
-    void addMemoryCacheElement(Ref uri, IBaseResource resource) {
+    void add(Ref uri, IBaseResource resource) {
         assert uri.isAbsolute()
         Ref fhirbase = uri.base
         ResourceCache cache = caches[fhirbase]
@@ -57,6 +57,17 @@ class ResourceCacheMgr {
         ResourceCache cache = caches[baseUrl]
         if (!cache) throw new Exception("Cannot access ${fullUrl}\nNo cache defined for baseUrl ${baseUrl}\nCaches exist for ${caches.keySet()}")
         return cache.readResource(fullUrl.relative)
+    }
+
+    @Override
+    String toString() {
+        StringBuilder buf = new StringBuilder()
+        buf << "${this.class.simpleName}\n"
+        caches.each { Ref key, ResourceCache value ->
+            buf << "${key} => ${value}\n"
+        }
+
+        buf.toString()
     }
 
 }

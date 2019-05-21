@@ -1,5 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.transactions
 
+import gov.nist.asbestos.fproxy.Base.IVal
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.Ref
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResolverConfig
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResourceCacheMgr
@@ -33,7 +34,7 @@ import javax.xml.bind.DatatypeConverter
  */
 
 // @TypeChecked - not because of use of MarkupBuilder
-class BundleToRegistryObjectList {
+class BundleToRegistryObjectList implements IVal {
 //    static private final Logger logger = Logger.getLogger(BundleToRegistryObjectList.class)
     static acceptableResourceTypes = [DocumentManifest, DocumentReference, Binary, ListResource]
     static String comprehensiveMetadataProfile = 'http://ihe.net/fhir/StructureDefinition/IHE_MHD_Provide_Comprehensive_DocumentBundle'
@@ -58,7 +59,7 @@ class BundleToRegistryObjectList {
     Val val
 
 
-    BundleToRegistryObjectList(ResourceCacheMgr resourceCacheMgr, CodeTranslator codeTranslator, AssigningAuthorities assigningAuthorities, Configuration config, Val val) {
+    BundleToRegistryObjectList(ResourceCacheMgr resourceCacheMgr, CodeTranslator codeTranslator, AssigningAuthorities assigningAuthorities, Configuration config) {
         this.resourceCacheMgr = resourceCacheMgr
         this.codeTranslator = codeTranslator
         this.assigningAuthorities = assigningAuthorities
@@ -67,7 +68,9 @@ class BundleToRegistryObjectList {
     }
 
     Submission build(Bundle bundle) {
-        rMgr = new ResourceMgr(bundle, val).addResourceCacheMgr(resourceCacheMgr)
+        assert val
+        rMgr = new ResourceMgr(bundle).addResourceCacheMgr(resourceCacheMgr)
+        rMgr.val = val
         scanBundleForAcceptability(bundle, rMgr)
 
         Submission submission = buildRegistryObjectList()
@@ -136,7 +139,7 @@ class BundleToRegistryObjectList {
         }
     }
 
-    def addRelationshipAssociations(MarkupBuilder xml, ResourceWrapper resource) {
+    private addRelationshipAssociations(MarkupBuilder xml, ResourceWrapper resource) {
         assert resource.resource instanceof DocumentReference
         DocumentReference dr = (DocumentReference) resource.resource
         if (!dr.relatesTo || dr.relatesTo.size() == 0) return
@@ -225,7 +228,7 @@ class BundleToRegistryObjectList {
      * @param dr - DocumentReference to source from
      * @return
      */
-    def addExtrinsicObject(MarkupBuilder builder, ResourceWrapper resource) {
+    private addExtrinsicObject(MarkupBuilder builder, ResourceWrapper resource) {
         DocumentReference dr = (DocumentReference) resource.resource
         assert dr.content, 'DocumentReference has no content section'
         assert dr.content.size() == 1, 'DocumentReference has multiple content sections'
@@ -334,7 +337,7 @@ class BundleToRegistryObjectList {
      */
 
     // TODO sourcePatientInfo is not populated
-    def addSourcePatient(MarkupBuilder builder, ResourceWrapper resource, Reference sourcePatient) {
+    private addSourcePatient(MarkupBuilder builder, ResourceWrapper resource, Reference sourcePatient) {
         if (!sourcePatient.reference)
             return
         val.add(new Val().msg("Resolve ${sourcePatient.reference} as SourcePatient"))
@@ -502,7 +505,7 @@ class BundleToRegistryObjectList {
         return uuid
     }
 
-    void scanBundleForAcceptability(Bundle bundle, ResourceMgr rMgr) {
+    private scanBundleForAcceptability(Bundle bundle, ResourceMgr rMgr) {
         if (bundle.meta.profile.size() != 1)
             val.err(new Val()
                     .msg('No profile declaration present in bundle')

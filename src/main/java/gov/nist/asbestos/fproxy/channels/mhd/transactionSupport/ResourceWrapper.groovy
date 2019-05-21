@@ -52,4 +52,13 @@ class ResourceWrapper {
             val.err(new Val().msg("Contained resource ${id} is a duplicate within ${resource.id}"))
         return duplicate
     }
+
+    @Override
+    String toString() {
+        StringBuilder buf = new  StringBuilder()
+
+        buf << "RW[${assignedId}, ${url}] => ${resource.class.simpleName}"
+
+        buf.toString()
+    }
 }
