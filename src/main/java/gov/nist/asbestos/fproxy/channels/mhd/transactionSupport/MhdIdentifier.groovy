@@ -1,6 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.transactionSupport
 
-import org.hl7.fhir.dstu3.model.Identifier
+import org.hl7.fhir.r4.model.Identifier
 
 class MhdIdentifier {
     String system

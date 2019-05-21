@@ -1,17 +1,19 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
-import org.hl7.fhir.instance.model.api.IBaseResource
+import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
+import groovy.transform.TypeChecked
 
+@TypeChecked
 class MemoryResourceCache implements ResourceCache {
-    Map<Ref, IBaseResource> cache = [:]
+    Map<Ref, ResourceWrapper> cache = [:]
 
     @Override
-    IBaseResource readResource(Ref url) {
+    ResourceWrapper readResource(Ref url) {
         cache[url]
     }
 
     @Override
-    void add(Ref ref, IBaseResource resource) {
-        cache[ref] = res
+    void add(Ref ref, ResourceWrapper resource) {
+        cache[ref] = resource
     }
 }

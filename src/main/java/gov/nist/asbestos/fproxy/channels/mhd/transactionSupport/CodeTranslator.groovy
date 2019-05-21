@@ -1,6 +1,6 @@
 package gov.nist.asbestos.fproxy.channels.mhd.transactionSupport
 
-import org.hl7.fhir.dstu3.model.CodeType
+import org.hl7.fhir.r4.model.CodeType
 
 
 class CodeTranslator {

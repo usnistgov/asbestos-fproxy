@@ -1,15 +1,12 @@
 package gov.nist.asbestos.fproxy.channels.mhd.resolver
 
-import gov.nist.asbestos.fproxy.Base.Base
-import gov.nist.asbestos.fproxy.Base.LoadedResource
+
 import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
-import gov.nist.asbestos.simapi.tk.util.UuidAllocator
 import gov.nist.asbestos.simapi.validation.Val
 
 import groovy.transform.TypeChecked
-import org.apache.log4j.Logger
-import org.hl7.fhir.dstu3.model.*
-import org.hl7.fhir.instance.model.api.IBaseResource
+
+import org.hl7.fhir.r4.model.Bundle
 
 /**
  *
@@ -45,7 +42,7 @@ class ResourceMgr {
                 thisVal.msg("Assigning ${id} to ${component.resource.class.simpleName}/${component.resource.idElement.value}")
                 ResourceWrapper wrapper = new ResourceWrapper(component.resource)
                         .setId(id)
-                        .setFullUrl(new Ref(component.fullUrl))
+                        .setUrl(new Ref(component.fullUrl))
 
                 thisVal.add("...${component.fullUrl}")
                 addResource(new Ref(component.fullUrl), wrapper)
@@ -85,7 +82,7 @@ class ResourceMgr {
      * @return [url, Resource]
      */
     // TODO - needs toughening - containingURL could be null if referenceURL is absolute
-    LoadedResource resolveReference(ResourceWrapper containing, Ref referenceUrl, ResolverConfig config) {
+    ResourceWrapper resolveReference(ResourceWrapper containing, Ref referenceUrl, ResolverConfig config) {
         assert containing : "resolveReference: containing resource is null"
         assert referenceUrl : "Reference from ${containing} is null"
         Val thisVal = val.addSection("Resolver: Resolve URL ${referenceUrl}... ${config}")
@@ -93,32 +90,33 @@ class ResourceMgr {
         if (config.containedRequired || (config.containedOk && referenceUrl.id.startsWith('#'))) {
             if (config.relativeReferenceOk && referenceUrl.toString().startsWith('#') && config.containedOk) {
                 thisVal.msg("Resolver: ...contained")
-                return new LoadedResource(referenceUrl, containing)
+                return new ResourceWrapper(containing.resource, referenceUrl)
             }
-            return new LoadedResource(null, null)
+            return new ResourceWrapper(null, null)
         }
         if (!config.externalRequired) {
             if (config.relativeReferenceOk && referenceUrl.toString().startsWith('#') && config.containedOk) {
                 ResourceWrapper res = containing.contained.get(referenceUrl)
+                res.url = referenceUrl
                 thisVal.msg("Resolver: ...contained")
-                return new LoadedResource(referenceUrl, res)
+                return res
             }
             if (resources[referenceUrl]) {
                 thisVal.msg("Resolver: ...in bundle")
-                return new LoadedResource(referenceUrl, resources[referenceUrl])
+                return resources[referenceUrl]
             }
             def isRelativeReference = !referenceUrl.isAbsolute()
             if (config.relativeReferenceRequired && !isRelativeReference) {
                 thisVal.msg("Resolver: ...relative reference required - not relative")
-                return new LoadedResource(null, null)
+                return new ResourceWrapper(null, null)
             }
             String resourceType = referenceUrl.resourceType
             // TODO - isAbsolute does an assert on containing... here is why... if we have gotten to this point...
             // Resource.fullUrl (containing) is a uuid (not a real reference) then it is not absolute
             // if it is not absolute then this refernceUrl cannot be relative (relative to what???).
             // this is a correct validation but needs a lot more on the error message (now a Groovy assert)
-            if (!containing.fullUrl.isAbsolute() && !referenceUrl.isAbsolute()) {
-                def x = resources.find {
+            if (!containing.url.isAbsolute() && !referenceUrl.isAbsolute()) {
+                Map.Entry<Ref, ResourceWrapper> x = resources.find {
                     def key = it.key
                     // for Patient, it must be absolute reference
                     if ('Patient' == resourceType && isRelativeReference && !config.relativeReferenceOk)
@@ -127,21 +125,21 @@ class ResourceMgr {
                 }
                 if (x) {
                     thisVal.msg("Resolver: ...found via relative reference")
-                    return new LoadedResource(x.key, x.value)
+                    return x.value
                 }
             }
-            if (containing.fullUrl.isAbsolute() && !referenceUrl.isAbsolute()) {
-                Ref url = containing.fullUrl.rebase(referenceUrl)
+            if (containing.url.isAbsolute() && !referenceUrl.isAbsolute()) {
+                Ref url = containing.url.rebase(referenceUrl)
                 if (resources[url]) {
                     thisVal.msg("Resolver: ...found in bundle")
-                    return new LoadedResource(url, resources[url])
+                    return resources[url]
                 }
                 if (resourceCacheMgr) {
                     thisVal.msg("Resolver: ...looking in Resource Cache")
                     ResourceWrapper resource = resourceCacheMgr.getResource(url)
                     if (resource) {
                         thisVal.msg("Resolver: ...returned from cache")
-                        return new LoadedResource(url, resource)
+                        return resource
                     }
                 } else
                     thisVal.msg("Resource Cache not configured")
@@ -155,7 +153,7 @@ class ResourceMgr {
                 ResourceWrapper resource = resourceCacheMgr.getResource(referenceUrl)
                 if (resource) {
                     thisVal.msg("Resolver: ...returned from cache")
-                    return new LoadedResource(referenceUrl, resource)
+                    return resource
                 }
             } else {
                 thisVal.msg("Resource Cache not configured")
@@ -163,15 +161,15 @@ class ResourceMgr {
             ResourceWrapper res = referenceUrl.load()
             if (res) {
                 thisVal.msg("Resolver: ...found")
-                return new LoadedResource(referenceUrl, res)
+                return res
             } else {
                 thisVal.msg("Resolver: ${referenceUrl} ...not available")
-                return new LoadedResource(null, null)
+                return new ResourceWrapper(null, null)
             }
         }
 
         thisVal.err(new Val().msg("Resolver: ...failed"))
-        new LoadedResource(null, null)
+        new ResourceWrapper(null, null)
     }
 
     int symbolicIdCounter = 1

@@ -3,6 +3,7 @@ package gov.nist.asbestos.fproxy.channels.mhd.resolver
 import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.ResourceWrapper
 import groovy.transform.TypeChecked
 import org.hl7.fhir.instance.model.api.IBaseResource
+import org.hl7.fhir.r4.model.Reference
 
 @TypeChecked
 class Ref {
@@ -23,7 +24,7 @@ class Ref {
         this.uri = ref.uri
     }
 
-    Ref(org.hl7.fhir.dstu3.model.Reference reference) {
+    Ref(Reference reference) {
         this(reference.reference)
     }
 

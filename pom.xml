@@ -2,7 +2,12 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>gov.nist.asbestos</groupId>
+  <parent>
+    <groupId>gov.nist.asbestos</groupId>
+    <artifactId>asbestos</artifactId>
+    <version>1.0-SNAPSHOT</version>
+  </parent>
+
   <artifactId>fproxy</artifactId>
   <packaging>war</packaging>
   <version>1.0-SNAPSHOT</version>
@@ -11,39 +16,24 @@
 
   <url>http://maven.apache.org</url>
 
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
-
-    <!--Aligns with spock.version and groovy-eclipse-compiler version-->
-    <groovyVersion>2.3.3</groovyVersion>
-    <spock.version>1.0-groovy-2.3</spock.version>
-    <hapi.version>3.7.0</hapi.version>
-  </properties>
 
   <dependencies>
 
     <!-- Bring in some toolkit code for test only -->
 
-    <dependency>
-      <groupId>gov.nist.toolkit</groupId>
-      <artifactId>validators-registry-metadata</artifactId>
-      <version>7.2.8</version>
-      <scope>test</scope>
-    </dependency>
+    <!--<dependency>-->
+      <!--<groupId>gov.nist.toolkit</groupId>-->
+      <!--<artifactId>validators-registry-metadata</artifactId>-->
+      <!--<version>7.2.8</version>-->
+      <!--<scope>test</scope>-->
+    <!--</dependency>-->
 
 
 
-    <dependency>
-      <groupId>org.spockframework</groupId>
-      <artifactId>spock-core</artifactId>
-      <version>${spock.version}</version>
-      <scope>test</scope>
-    </dependency>
+
 
     <dependency>
-      <groupId>gov.nist.toolkit</groupId>
+      <groupId>gov.nist.asbestos</groupId>
       <artifactId>asbestos-adapter</artifactId>
       <version>1.0-SNAPSHOT</version>
     </dependency>
@@ -53,17 +43,8 @@
       <version>1.0-SNAPSHOT</version>
     </dependency>
 
-    <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <version>1.2.12</version>  <!-- was 1.2.17 -->
-    </dependency>
 
-    <dependency>
-      <groupId>org.codehaus.groovy</groupId>
-      <artifactId>groovy-all</artifactId>
-      <version>${groovyVersion}</version>
-    </dependency>
+
 
     <!-- https://mvnrepository.com/artifact/javax.servlet/servlet-api -->
     <dependency>
@@ -73,75 +54,10 @@
       <scope>provided</scope>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/ca.uhn.hapi.fhir/hapi-fhir-client -->
-    <dependency>
-      <groupId>ca.uhn.hapi.fhir</groupId>
-      <artifactId>hapi-fhir-client</artifactId>
-      <version>${hapi.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>ca.uhn.hapi.fhir</groupId>
-      <artifactId>hapi-fhir-base</artifactId>
-      <version>${hapi.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>ca.uhn.hapi.fhir</groupId>
-      <artifactId>hapi-fhir-structures-dstu3</artifactId>
-      <version>${hapi.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>ca.uhn.hapi.fhir</groupId>
-      <artifactId>hapi-fhir-structures-hl7org-dstu2</artifactId>
-      <version>${hapi.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>ca.uhn.hapi.fhir</groupId>
-      <artifactId>hapi-fhir-validation-resources-dstu3</artifactId>
-      <version>${hapi.version}</version>
-    </dependency>
 
   </dependencies>
 
   <build>
     <finalName>fproxy</finalName>
-
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.1</version>
-        <configuration>
-          <compilerId>groovy-eclipse-compiler</compilerId>
-          <source>1.8</source>
-          <target>1.8</target>
-        </configuration>
-        <dependencies>
-          <dependency>
-            <groupId>org.codehaus.groovy</groupId>
-            <artifactId>groovy-eclipse-compiler</artifactId>
-            <version>2.9.0-01</version>
-          </dependency>
-          <dependency>
-            <groupId>org.codehaus.groovy</groupId>
-            <artifactId>groovy-eclipse-batch</artifactId>
-            <version>2.3.4-01</version>
-          </dependency>
-        </dependencies>
-      </plugin>
-      <plugin>
-        <groupId>org.codehaus.groovy</groupId>
-        <artifactId>groovy-eclipse-compiler</artifactId>
-        <version>2.9.0-01</version>
-        <extensions>true</extensions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-war-plugin</artifactId>
-        <configuration>
-
-        </configuration>
-      </plugin>
-    </plugins>
   </build>
 </project>

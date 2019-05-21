@@ -42,7 +42,7 @@ class ResourceCacheMgr {
             caches[fhirbase] = cache
         }
         assert cache instanceof MemoryResourceCache
-        cache.add(uri.relative, resource)
+        cache.add(uri.relative, new ResourceWrapper(resource))
     }
 
 

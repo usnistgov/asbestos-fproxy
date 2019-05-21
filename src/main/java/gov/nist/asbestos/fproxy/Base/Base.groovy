@@ -1,9 +1,8 @@
 package gov.nist.asbestos.fproxy.Base
 
 import ca.uhn.fhir.context.FhirContext
-import groovy.transform.TypeChecked
 
-@TypeChecked
+
 class Base {
     static private FhirContext ourCtx
 

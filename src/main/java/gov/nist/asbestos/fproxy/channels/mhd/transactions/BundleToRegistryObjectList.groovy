@@ -1,15 +1,13 @@
 package gov.nist.asbestos.fproxy.channels.mhd.transactions
 
-import gov.nist.asbestos.fproxy.Base.LoadedResource
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.Ref
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResolverConfig
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResourceCacheMgr
 import gov.nist.asbestos.fproxy.channels.mhd.resolver.ResourceMgr
 import gov.nist.asbestos.fproxy.channels.mhd.transactionSupport.*
 import gov.nist.asbestos.simapi.validation.Val
-import groovy.transform.TypeChecked
 import groovy.xml.MarkupBuilder
-import org.hl7.fhir.dstu3.model.*
+import org.hl7.fhir.r4.model.*
 import org.hl7.fhir.instance.model.api.IBaseResource
 
 import javax.xml.bind.DatatypeConverter
@@ -34,7 +32,7 @@ import javax.xml.bind.DatatypeConverter
  * ExtrinsicObject id = ID07
  */
 
-@TypeChecked
+// @TypeChecked - not because of use of MarkupBuilder
 class BundleToRegistryObjectList {
 //    static private final Logger logger = Logger.getLogger(BundleToRegistryObjectList.class)
     static acceptableResourceTypes = [DocumentManifest, DocumentReference, Binary, ListResource]
@@ -102,16 +100,12 @@ class BundleToRegistryObjectList {
                 }
                 else if (resource.resource instanceof DocumentReference) {
                     DocumentReference dr = (DocumentReference) resource.resource
-                    LoadedResource loadedResource = rMgr.resolveReference(resource, new Ref(dr.content[0].attachment.url), new ResolverConfig().internalRequired())
-                    if (!(loadedResource.resource.resource instanceof Binary))
+                    ResourceWrapper loadedResource = rMgr.resolveReference(resource, new Ref(dr.content[0].attachment.url), new ResolverConfig().internalRequired())
+                    if (!(loadedResource.resource instanceof Binary))
                         val.err(new Val()
                         .msg("Binary ${dr.content[0].attachment.url} is not available in Bundle."))
-                    Binary b = (Binary) loadedResource.resource.resource
+                    Binary b = (Binary) loadedResource.resource
                     b.id = dr.masterIdentifier.value
-//                    String proxyFhirBase = ''
-//                    if (proxyBase)
-//                        proxyFhirBase = proxyBase.config.getEndpoint(TransactionType.FHIR)
-//                    dr.content[0].attachment.url = proxyFhirBase + '/' + 'Binary/' + dr.masterIdentifier.value
                     Attachment a = new Attachment()
                     a.contentId = Integer.toString(index) + baseContentId
                     a.contentType = b.contentType
@@ -120,7 +114,6 @@ class BundleToRegistryObjectList {
                     index++
 
                     addExtrinsicObject(xml, resource)
-//                    documents[dr.getId()] = a.contentId
                     documents[resource.assignedId] = a.contentId
                     addRelationshipAssociations(xml, resource)
                 }
@@ -133,14 +126,13 @@ class BundleToRegistryObjectList {
     private addSubmissionSetAssociations(MarkupBuilder xml, ResourceWrapper resource) {
         DocumentManifest dm = (DocumentManifest) resource.resource
         if (!dm.content) return
-        dm.content.each { DocumentManifest.DocumentManifestContentComponent component ->
-            Reference ref = component.PReference
-            LoadedResource loadedResource = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().internalRequired())
+        dm.content.each { Reference ref ->
+            ResourceWrapper loadedResource = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().internalRequired())
 
             if (!loadedResource.resource)
                 val.err(new Val()
                 .msg("DocumentManifest references ${ref.resource} - ${loadedResource.ref} is not included in the bundle"))
-            addAssociation(xml, 'urn:oasis:names:tc:ebxml-regrep:AssociationType:HasMember', resource, loadedResource.ref, 'SubmissionSetStatus', ['Original'])
+            addAssociation(xml, 'urn:oasis:names:tc:ebxml-regrep:AssociationType:HasMember', resource, loadedResource.url, 'SubmissionSetStatus', ['Original'])
         }
     }
 
@@ -159,14 +151,14 @@ class BundleToRegistryObjectList {
 
             Reference ref = comp.target
 
-            LoadedResource referencedDocRef = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().externalRequired())
+            ResourceWrapper referencedDocRef = rMgr.resolveReference(resource, new Ref(ref.reference), new ResolverConfig().externalRequired())
 
             if (!referencedDocRef.resource) {
                 val.err(new Val()
                         .msg("Trying to build ${xdsType} Association - ${ref.reference} cannot be resolved"))
                 return
             }
-            addAssociation(xml, xdsType, resource, referencedDocRef.ref, null, null)
+            addAssociation(xml, xdsType, resource, referencedDocRef.url, null, null)
         }
     }
 
@@ -347,20 +339,20 @@ class BundleToRegistryObjectList {
             return
         val.add(new Val().msg("Resolve ${sourcePatient.reference} as SourcePatient"))
         def extra = 'DocumentReference.context.sourcePatientInfo must reference Contained Patient resource with Patient.identifier.use element set to "usual"'
-        LoadedResource loadedPatient = rMgr.resolveReference(resource, new Ref(sourcePatient.reference), new ResolverConfig().containedRequired())
+        ResourceWrapper loadedPatient = rMgr.resolveReference(resource, new Ref(sourcePatient.reference), new ResolverConfig().containedRequired())
         if (!loadedPatient.resource) {
             val.err(new Val()
-            .msg("Cannot load resource at ${loadedPatient.ref}"))
+            .msg("Cannot load resource at ${loadedPatient.url}"))
             return
         }
 
-        if (!(loadedPatient.resource.resource instanceof Patient)) {
+        if (!(loadedPatient.resource instanceof Patient)) {
             val.err(new Val()
-            .msg("Patient loaded from ${loadedPatient.ref} returned a ${loadedPatient.resource.class.simpleName} instead"))
+            .msg("Patient loaded from ${loadedPatient.url} returned a ${loadedPatient.resource.class.simpleName} instead"))
             return
         }
 
-        Patient patient = (Patient) loadedPatient.resource.resource
+        Patient patient = (Patient) loadedPatient.resource
 
         // find identifier that aligns with required Assigning Authority
         List<Identifier> identifiers = patient.getIdentifier()
@@ -387,8 +379,8 @@ class BundleToRegistryObjectList {
     // TODO official identifiers must be changed
     private addSubject(MarkupBuilder builder, ResourceWrapper resource, Ref referenced, String scheme, String attName) {
 
-        LoadedResource loadedResource = rMgr.resolveReference(resource, referenced, new ResolverConfig().externalRequired())
-        if (!loadedResource.ref) {
+        ResourceWrapper loadedResource = rMgr.resolveReference(resource, referenced, new ResolverConfig().externalRequired())
+        if (!loadedResource.url) {
             val.err(new Val()
                     .msg("${resource} makes reference to ${referenced}")
                     .msg('All DocumentReference.subject and DocumentManifest.subject values shall be References to FHIR Patient Resources identified by an absolute external reference (URL).')
@@ -399,7 +391,7 @@ class BundleToRegistryObjectList {
                     .msg("${resource} points to a ${loadedResource.resource.class.simpleName} - it must be a Patient")
                     .frameworkDoc('3.65.4.1.2.2 Patient Identity'))
 
-        Patient patient = (Patient) loadedResource.resource.resource
+        Patient patient = (Patient) loadedResource.resource
 
         List<Identifier> identifiers = patient.getIdentifier()
         def pid = findAcceptablePID(identifiers)
