@@ -237,7 +237,7 @@ class ProxyServlet extends HttpServlet {
     static HttpBase logRequestIn(Event event, HttpBase http, HttpServletRequest req, Verb verb) {
         event.store.selectRequest()
 
-        // Log Headers
+        // Log headers
         RawHeaders rawHeaders = new RawHeaders()
         rawHeaders.addNames(req.headerNames)
         rawHeaders.names.each { String name ->
