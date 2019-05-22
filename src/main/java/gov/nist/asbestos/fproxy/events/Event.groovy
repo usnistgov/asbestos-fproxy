@@ -1,7 +1,7 @@
 package gov.nist.asbestos.fproxy.events
 
-import gov.nist.asbestos.simapi.http.headers.Headers
-import gov.nist.asbestos.simapi.http.headers.RawHeaders
+import Headers
+import RawHeaders
 import gov.nist.asbestos.simapi.tk.simCommon.SimId
 import groovy.transform.TypeChecked
 

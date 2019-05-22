@@ -2,9 +2,9 @@ package gov.nist.asbestos.fproxy.events
 
 import gov.nist.asbestos.fproxy.log.SimStore
 import gov.nist.asbestos.fproxy.log.Task
-import gov.nist.asbestos.simapi.http.headers.Headers
-import gov.nist.asbestos.simapi.http.headers.HeaderBuilder
-import gov.nist.asbestos.simapi.http.headers.RawHeaders
+import Headers
+import HeaderBuilder
+import RawHeaders
 import groovy.transform.TypeChecked
 
 

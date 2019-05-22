@@ -3,11 +3,11 @@ package gov.nist.asbestos.fproxy.channels.passthrough
 import gov.nist.asbestos.fproxy.channel.BaseChannel
 import gov.nist.asbestos.fproxy.channel.ChannelConfig
 import gov.nist.asbestos.fproxy.events.EventStore
-import gov.nist.asbestos.simapi.http.operations.HttpBase
-import gov.nist.asbestos.simapi.http.operations.HttpGet
-import gov.nist.asbestos.simapi.http.operations.HttpPost
-import gov.nist.asbestos.simapi.http.headers.HeaderBuilder
-import gov.nist.asbestos.simapi.http.headers.Headers
+import HttpBase
+import HttpGet
+import HttpPost
+import HeaderBuilder
+import Headers
 import groovy.transform.TypeChecked
 
 @TypeChecked

@@ -1,6 +1,6 @@
 package gov.nist.asbestos.fproxy.Base
 
-import gov.nist.asbestos.simapi.http.operations.HttpGet
+import HttpGet
 import groovy.transform.TypeChecked
 import org.hl7.fhir.instance.model.api.IBaseResource
 
